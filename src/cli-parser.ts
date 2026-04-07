@@ -1,6 +1,7 @@
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
 import { SchemaInfo } from './schema-transformer';
+import { globalGenerator } from './short-param';
 
 export interface CliConfig {
   [key: string]: string | number | boolean | undefined;
@@ -9,6 +10,8 @@ export interface CliConfig {
 export function parseCliArguments(info: SchemaInfo): CliConfig {
   const argv = hideBin(process.argv);
   const config: CliConfig = {};
+
+  globalGenerator.reset();
 
   if (argv.length === 0) {
     for (const field of info.fields) {
@@ -23,6 +26,9 @@ export function parseCliArguments(info: SchemaInfo): CliConfig {
 
   for (const field of info.fields) {
     const cliName = field.cmdName;
+    const shortParam = field.cmdNameShort
+      ? globalGenerator.getShortParam(field.name, field.cmdNameShort)
+      : globalGenerator.getShortParam(field.name, cliName);
 
     if (field.type === 'boolean') {
       y = y.boolean(cliName);
@@ -32,10 +38,16 @@ export function parseCliArguments(info: SchemaInfo): CliConfig {
       y = y.string(cliName);
     }
 
+    const options: Record<string, unknown> = {};
     if (field.enumValues) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      y = (y as any).option(cliName, { choices: field.enumValues });
+      options.choices = field.enumValues;
     }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    y = (y as any).option(cliName, {
+      alias: shortParam,
+      ...options,
+    });
   }
 
   const parsed = y.argv;

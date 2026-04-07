@@ -1,2 +1,3 @@
-node_modues
+node_modules
 test-env-temp
+tsconfig.tsbuildinfo

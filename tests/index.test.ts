@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { configure, customConfigElement } from '../src/index';
 import { z } from 'zod';
 import { writeFileSync, unlinkSync, existsSync, mkdirSync } from 'fs';
@@ -45,12 +45,10 @@ describe('configure', () => {
   }
 
   it('returns default values when no config provided', () => {
-    const schema = z.object({
+    const config = configure({
       port: z.number().default(3000),
       host: z.string().default('localhost'),
     });
-
-    const config = configure(schema);
 
     expect(config).toEqual({
       port: 3000,
@@ -61,12 +59,13 @@ describe('configure', () => {
   it('reads from .env file', () => {
     writeFileSync(envPath, 'PORT=8080\nHOST=example.com\n');
 
-    const schema = z.object({
-      port: z.number(),
-      host: z.string(),
-    });
-
-    const config = configure(schema, { envPath });
+    const config = configure(
+      {
+        port: z.number(),
+        host: z.string(),
+      },
+      { envPath }
+    );
 
     expect(config.port).toBe(8080);
     expect(config.host).toBe('example.com');
@@ -76,11 +75,12 @@ describe('configure', () => {
     writeFileSync(envPath, 'PORT=8080\n');
     process.env.PORT = '9000';
 
-    const schema = z.object({
-      port: z.number(),
-    });
-
-    const config = configure(schema, { envPath });
+    const config = configure(
+      {
+        port: z.number(),
+      },
+      { envPath }
+    );
 
     expect(config.port).toBe(9000);
   });
@@ -89,11 +89,9 @@ describe('configure', () => {
     process.env.PORT = '9000';
     mockArgs(['--port', '7000']);
 
-    const schema = z.object({
+    const config = configure({
       port: z.number(),
     });
-
-    const config = configure(schema);
 
     expect(config.port).toBe(7000);
   });
@@ -101,25 +99,24 @@ describe('configure', () => {
   it('validates configuration against schema', () => {
     writeFileSync(envPath, 'PORT=not-a-number\n');
 
-    const schema = z.object({
-      port: z.number(),
-    });
-
-    expect(() => configure(schema, { envPath })).toThrow(
-      /Configuration validation failed/
-    );
+    expect(() =>
+      configure(
+        {
+          port: z.number(),
+        },
+        { envPath }
+      )
+    ).toThrow(/Configuration validation failed/);
   });
 
   it('handles complex schema with multiple types', () => {
     mockArgs(['--port', '3000', '--enable-cache']);
 
-    const schema = z.object({
+    const config = configure({
       port: z.number(),
       host: z.string().default('localhost'),
       enableCache: z.boolean().default(false),
     });
-
-    const config = configure(schema);
 
     expect(config.port).toBe(3000);
     expect(config.host).toBe('localhost');
@@ -137,13 +134,14 @@ describe('configure', () => {
 
     mockArgs(['--port', '3000', '--host', 'cli-host']);
 
-    const schema = z.object({
-      port: z.number(),
-      host: z.string(),
-      enableCache: z.boolean(),
-    });
-
-    const config = configure(schema, { envPath });
+    const config = configure(
+      {
+        port: z.number(),
+        host: z.string(),
+        enableCache: z.boolean(),
+      },
+      { envPath }
+    );
 
     expect(config.port).toBe(3000);
     expect(config.host).toBe('cli-host');
@@ -153,13 +151,11 @@ describe('configure', () => {
   it('infers correct types from schema', () => {
     mockArgs(['--port', '8080', '--name', 'myapp', '--enabled']);
 
-    const schema = z.object({
+    const config = configure({
       port: z.number(),
       name: z.string(),
       enabled: z.boolean(),
     });
-
-    const config = configure(schema);
 
     expect(typeof config.port).toBe('number');
     expect(typeof config.name).toBe('string');
@@ -211,5 +207,28 @@ describe('configure', () => {
     });
 
     expect(config.port).toBe(8000);
+  });
+
+  it('customConfigElement with custom cmdNameShort', () => {
+    mockArgs(['-p', '9000']);
+
+    const config = configure({
+      port: customConfigElement(z.number(), { cmdNameShort: 'p' }),
+    });
+
+    expect(config.port).toBe(9000);
+  });
+
+  it('customConfigElement with cmdName and cmdNameShort', () => {
+    mockArgs(['--server-port', '-s', '7500']);
+
+    const config = configure({
+      serverPort: customConfigElement(z.number(), {
+        cmdName: '--server-port',
+        cmdNameShort: 's',
+      }),
+    });
+
+    expect(config.serverPort).toBe(7500);
   });
 });
