@@ -42,6 +42,9 @@ export function parseCliArguments(info: SchemaInfo): CliConfig {
     if (field.enumValues) {
       options.choices = field.enumValues;
     }
+    if (field.cmdDescription) {
+      options.describe = field.cmdDescription;
+    }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     y = (y as any).option(cliName, {

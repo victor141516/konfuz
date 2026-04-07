@@ -10,7 +10,8 @@ function customConfigElement(type, options) {
 		type,
 		envName: options?.envName,
 		cmdName: options?.cmdName,
-		cmdNameShort: options?.cmdNameShort
+		cmdNameShort: options?.cmdNameShort,
+		cmdDescription: options?.cmdDescription
 	};
 }
 function toEnvName(key) {
@@ -61,12 +62,14 @@ function extractSchemaInfo(config) {
 		let schema;
 		let customEnvName;
 		let customCmdName;
-		let customcmdNameShort;
+		let customCmdNameShort;
+		let customCmdDescription;
 		if (isCustomConfigElement(value)) {
 			schema = value.type;
 			customEnvName = value.envName;
 			customCmdName = value.cmdName;
-			customcmdNameShort = value.cmdNameShort;
+			customCmdNameShort = value.cmdNameShort;
+			customCmdDescription = value.cmdDescription;
 		} else schema = value;
 		shape[key] = schema;
 		const { type, enumValues } = getFieldType(schema);
@@ -74,7 +77,8 @@ function extractSchemaInfo(config) {
 			name: key,
 			envName: customEnvName ?? toEnvName(key),
 			cmdName: customCmdName ?? toCliName(key),
-			cmdNameShort: customcmdNameShort,
+			cmdNameShort: customCmdNameShort,
+			cmdDescription: customCmdDescription,
 			type,
 			isOptional: isOptional(schema),
 			defaultValue: hasDefault(schema) ? getDefaultValue(schema) : void 0,
@@ -201,6 +205,7 @@ function parseCliArguments(info) {
 		else y = y.string(cliName);
 		const options = {};
 		if (field.enumValues) options.choices = field.enumValues;
+		if (field.cmdDescription) options.describe = field.cmdDescription;
 		y = y.option(cliName, {
 			alias: shortParam,
 			...options

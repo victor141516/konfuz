@@ -6,12 +6,14 @@ interface CustomConfigElement<T extends z.ZodTypeAny = z.ZodTypeAny> {
   envName?: string;
   cmdName?: string;
   cmdNameShort?: string;
+  cmdDescription?: string;
 }
 type ConfigShape = Record<string, z.ZodTypeAny | CustomConfigElement>;
 declare function customConfigElement<T extends z.ZodTypeAny>(type: T, options?: {
   envName?: string;
   cmdName?: string;
   cmdNameShort?: string;
+  cmdDescription?: string;
 }): CustomConfigElement<T>;
 declare function toEnvName(key: string): string;
 declare function toCliName(key: string): string;

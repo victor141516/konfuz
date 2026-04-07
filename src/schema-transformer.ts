@@ -7,6 +7,7 @@ export interface ConfigField {
   envName: string;
   cmdName: string;
   cmdNameShort?: string;
+  cmdDescription?: string;
   type: ConfigFieldType;
   isOptional: boolean;
   defaultValue?: unknown;
@@ -23,19 +24,26 @@ export interface CustomConfigElement<T extends z.ZodTypeAny = z.ZodTypeAny> {
   envName?: string;
   cmdName?: string;
   cmdNameShort?: string;
+  cmdDescription?: string;
 }
 
 export type ConfigShape = Record<string, z.ZodTypeAny | CustomConfigElement>;
 
 export function customConfigElement<T extends z.ZodTypeAny>(
   type: T,
-  options?: { envName?: string; cmdName?: string; cmdNameShort?: string }
+  options?: {
+    envName?: string;
+    cmdName?: string;
+    cmdNameShort?: string;
+    cmdDescription?: string;
+  }
 ): CustomConfigElement<T> {
   return {
     type,
     envName: options?.envName,
     cmdName: options?.cmdName,
     cmdNameShort: options?.cmdNameShort,
+    cmdDescription: options?.cmdDescription,
   };
 }
 
@@ -138,13 +146,15 @@ export function extractSchemaInfo(
     let schema: z.ZodType;
     let customEnvName: string | undefined;
     let customCmdName: string | undefined;
-    let customcmdNameShort: string | undefined;
+    let customCmdNameShort: string | undefined;
+    let customCmdDescription: string | undefined;
 
     if (isCustomConfigElement(value)) {
       schema = value.type;
       customEnvName = value.envName;
       customCmdName = value.cmdName;
-      customcmdNameShort = value.cmdNameShort;
+      customCmdNameShort = value.cmdNameShort;
+      customCmdDescription = value.cmdDescription;
     } else {
       schema = value;
     }
@@ -157,7 +167,8 @@ export function extractSchemaInfo(
       name: key,
       envName: customEnvName ?? toEnvName(key),
       cmdName: customCmdName ?? toCliName(key),
-      cmdNameShort: customcmdNameShort,
+      cmdNameShort: customCmdNameShort,
+      cmdDescription: customCmdDescription,
       type,
       isOptional: isOptional(schema),
       defaultValue: hasDefault(schema) ? getDefaultValue(schema) : undefined,

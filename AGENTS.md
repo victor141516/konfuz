@@ -49,6 +49,7 @@ interface CustomConfigElement<T extends z.ZodTypeAny = z.ZodTypeAny> {
   envName?: string; // Custom env var name (default: UPPER_SNAKE_CASE)
   cmdName?: string; // Custom CLI flag (default: kebab-case)
   cmdShort?: string; // Custom short flag (auto-generated if not provided)
+  cmdDescription?: string; // Custom CLI argument description (for --help)
 }
 ```
 
@@ -60,6 +61,7 @@ interface ConfigField {
   envName: string; // Environment variable name
   cmdName: string; // CLI long flag
   cmdShort?: string; // CLI short flag
+  cmdDescription?: string; // CLI argument description (for --help)
   type: 'string' | 'number' | 'boolean' | 'enum';
   isOptional: boolean;
   defaultValue?: unknown;
@@ -183,6 +185,7 @@ Creates a configuration element with custom naming.
 - `options.envName`: Custom environment variable name
 - `options.cmdName`: Custom CLI flag name
 - `options.cmdShort`: Custom CLI short flag
+- `options.cmdDescription`: Custom CLI argument description (shown in --help)
 
 **Example:**
 
@@ -191,6 +194,7 @@ customConfigElement(z.number(), {
   envName: 'SERVER_PORT',
   cmdName: '--server-port',
   cmdShort: 's',
+  cmdDescription: 'The port number to listen on',
 });
 ```
 
