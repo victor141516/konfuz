@@ -1,4 +1,4 @@
-# parse-my-conf
+# konfuz
 
 **Configuration management for NPM applications made simple** ⚙️
 
@@ -16,9 +16,9 @@ A zero-boilerplate configuration library that reads from `.env` files, environme
 ## 📦 Installation
 
 ```bash
-npm install parse-my-conf zod
+npm install konfuz zod
 # or
-pnpm add parse-my-conf zod
+pnpm add konfuz zod
 ```
 
 > **Note:** `zod` is a peer dependency. You need to install it separately.
@@ -26,7 +26,7 @@ pnpm add parse-my-conf zod
 ## 🚀 Quick Start
 
 ```typescript
-import { configure, customConfigElement } from 'parse-my-conf';
+import { configure, customConfigElement } from 'konfuz';
 import { z } from 'zod';
 
 const config = configure({
@@ -57,21 +57,21 @@ const config = configure({
 
 The library automatically converts your schema keys to `UPPER_SNAKE_CASE` for environment variables:
 
-| Schema Key | Environment Variable |
-|------------|---------------------|
-| `port` | `PORT` |
-| `databaseHost` | `DATABASE_HOST` |
-| `enableCache` | `ENABLE_CACHE` |
+| Schema Key     | Environment Variable |
+| -------------- | -------------------- |
+| `port`         | `PORT`               |
+| `databaseHost` | `DATABASE_HOST`      |
+| `enableCache`  | `ENABLE_CACHE`       |
 
 ### CLI Arguments
 
 CLI arguments are automatically generated from your schema:
 
-| Schema Key | Long Flag | Short Flag |
-|------------|-----------|------------|
-| `port` | `--port` | `-p` |
-| `databaseHost` | `--database-host` | `-d` |
-| `enableCache` | `--enable-cache` | `-e` |
+| Schema Key     | Long Flag         | Short Flag |
+| -------------- | ----------------- | ---------- |
+| `port`         | `--port`          | `-p`       |
+| `databaseHost` | `--database-host` | `-d`       |
+| `enableCache`  | `--enable-cache`  | `-e`       |
 
 ### Priority Order
 
@@ -94,13 +94,13 @@ Use `customConfigElement` to customize how a field is configured:
 const config = configure({
   // Custom environment variable name
   port: customConfigElement(z.number(), { envName: 'SERVER_PORT' }),
-  
+
   // Custom CLI flag name
   host: customConfigElement(z.string(), { cmdName: '--server-host' }),
-  
+
   // Custom short flag
   verbose: customConfigElement(z.boolean(), { cmdShort: 'v' }),
-  
+
   // All customizations
   apiKey: customConfigElement(z.string(), {
     envName: 'API_SECRET',
@@ -121,7 +121,7 @@ const config = configure(schema, { envPath: '/path/to/config.env' });
 ## 💡 Example Application
 
 ```typescript
-import { configure, customConfigElement } from 'parse-my-conf';
+import { configure, customConfigElement } from 'konfuz';
 import { z } from 'zod';
 
 const config = configure({

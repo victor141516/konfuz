@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-`parse-my-conf` is a configuration management library for NPM (Node.js) applications. It reads configuration from multiple sources (.env files, environment variables, CLI arguments) with type safety provided by Zod schemas.
+`konfuz` is a configuration management library for NPM (Node.js) applications. It reads configuration from multiple sources (.env files, environment variables, CLI arguments) with type safety provided by Zod schemas.
 
 **Key characteristics:**
 
