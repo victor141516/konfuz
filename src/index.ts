@@ -4,8 +4,8 @@ import {
   extractDefaults,
   normalizeToZodObject,
   customConfigElement,
-  type CustomConfigElement,
-  type ConfigShape,
+  type FieldConfig,
+  type ConfigInput,
 } from './schema-transformer';
 import { loadEnvFile, type EnvFileConfig } from './loader';
 import { parseEnvVariables, type EnvConfig } from './env-parser';
@@ -18,22 +18,22 @@ export interface ParseMyConfOptions {
 
 export { customConfigElement };
 
-type InferConfig<T extends ConfigShape> = {
+type InferConfig<T extends ConfigInput> = {
   [K in keyof T]: T[K] extends z.ZodTypeAny
     ? z.infer<T[K]>
-    : T[K] extends CustomConfigElement
+    : T[K] extends FieldConfig
       ? z.infer<T[K]['type']>
       : never;
 };
 
-export function configure<T extends ConfigShape>(
+export function configure<T extends ConfigInput>(
   config: T,
   options?: ParseMyConfOptions
 ): InferConfig<T> {
-  const info = extractSchemaInfo(config as ConfigShape);
+  const info = extractSchemaInfo(config as ConfigInput);
 
   const schema: z.ZodObject<Record<string, z.ZodTypeAny>> =
-    normalizeToZodObject(config as ConfigShape);
+    normalizeToZodObject(config as ConfigInput);
 
   const defaults = extractDefaults(schema.shape);
 

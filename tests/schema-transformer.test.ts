@@ -37,10 +37,10 @@ describe('schema-transformer', () => {
 
   describe('extractSchemaInfo', () => {
     it('extracts field information from simple schema', () => {
-      const schema = z.object({
+      const schema = {
         port: z.number(),
         host: z.string(),
-      });
+      };
 
       const info = extractSchemaInfo(schema);
 
@@ -62,9 +62,9 @@ describe('schema-transformer', () => {
     });
 
     it('handles optional fields', () => {
-      const schema = z.object({
+      const schema = {
         port: z.number().optional(),
-      });
+      };
 
       const info = extractSchemaInfo(schema);
 
@@ -72,10 +72,10 @@ describe('schema-transformer', () => {
     });
 
     it('handles fields with defaults', () => {
-      const schema = z.object({
+      const schema = {
         port: z.number().default(3000),
         host: z.string().default('localhost'),
-      });
+      };
 
       const info = extractSchemaInfo(schema);
 
@@ -86,9 +86,9 @@ describe('schema-transformer', () => {
     });
 
     it('handles boolean fields', () => {
-      const schema = z.object({
+      const schema = {
         enableCache: z.boolean(),
-      });
+      };
 
       const info = extractSchemaInfo(schema);
 
@@ -96,9 +96,9 @@ describe('schema-transformer', () => {
     });
 
     it('handles enum fields', () => {
-      const schema = z.object({
+      const schema = {
         environment: z.enum(['development', 'production']),
-      });
+      };
 
       const info = extractSchemaInfo(schema);
 
@@ -145,12 +145,12 @@ describe('schema-transformer', () => {
 
   describe('extractDefaults', () => {
     it('extracts default values from schema', () => {
-      const schema = z.object({
+      const schema = {
         port: z.number().default(3000),
         host: z.string().default('localhost'),
-      });
+      };
 
-      const defaults = extractDefaults(schema.shape);
+      const defaults = extractDefaults(schema);
 
       expect(defaults).toEqual({
         port: 3000,
@@ -159,10 +159,10 @@ describe('schema-transformer', () => {
     });
 
     it('returns empty object when no defaults', () => {
-      const schema = z.object({
+      const schema = {
         port: z.number(),
         host: z.string(),
-      });
+      };
 
       const defaults = extractDefaults(schema);
 

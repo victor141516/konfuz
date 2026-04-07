@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ConfigFieldType, SchemaInfo } from './schema-transformer';
+import { FieldType, SchemaDescriptor } from './schema-transformer';
 
 export interface EnvFileConfig {
   [key: string]: string;
@@ -10,7 +10,7 @@ export interface EnvConfig {
 }
 
 export function parseEnvVariables(
-  info: SchemaInfo,
+  info: SchemaDescriptor,
   envFileConfig: EnvFileConfig
 ): EnvConfig {
   const config: EnvConfig = {};
@@ -32,10 +32,7 @@ export function parseEnvVariables(
   return config;
 }
 
-function getCoercionSchema(
-  type: ConfigFieldType,
-  enumValues?: string[]
-): z.ZodType {
+function getCoercionSchema(type: FieldType, enumValues?: string[]): z.ZodType {
   switch (type) {
     case 'number':
       return z.coerce.number();
@@ -51,7 +48,7 @@ function getCoercionSchema(
 
 function parseWithZod(
   value: string,
-  type: ConfigFieldType,
+  type: FieldType,
   enumValues?: string[]
 ): string | number | boolean | undefined {
   const schema = getCoercionSchema(type, enumValues);

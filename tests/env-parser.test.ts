@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { parseEnvVariables } from '../src/env-parser';
 import { extractSchemaInfo } from '../src/schema-transformer';
 import { z } from 'zod';
@@ -16,10 +16,10 @@ describe('env-parser', () => {
   });
 
   it('parses environment variables based on schema', () => {
-    const schema = z.object({
+    const schema = {
       port: z.number(),
       host: z.string(),
-    });
+    };
 
     const info = extractSchemaInfo(schema);
 
@@ -33,9 +33,9 @@ describe('env-parser', () => {
   });
 
   it('converts string values to numbers for number type', () => {
-    const schema = z.object({
+    const schema = {
       port: z.number(),
-    });
+    };
 
     const info = extractSchemaInfo(schema);
 
@@ -48,9 +48,9 @@ describe('env-parser', () => {
   });
 
   it('converts boolean string values', () => {
-    const schema = z.object({
+    const schema = {
       enableCache: z.boolean(),
-    });
+    };
 
     const info = extractSchemaInfo(schema);
 
@@ -62,12 +62,12 @@ describe('env-parser', () => {
   });
 
   it('handles various boolean string representations', () => {
-    const schema = z.object({
+    const schema = {
       flag1: z.boolean(),
       flag2: z.boolean(),
       flag3: z.boolean(),
       flag4: z.boolean(),
-    });
+    };
 
     const info = extractSchemaInfo(schema);
 
@@ -85,10 +85,10 @@ describe('env-parser', () => {
   });
 
   it('merges env file config with process.env', () => {
-    const schema = z.object({
+    const schema = {
       port: z.number(),
       host: z.string(),
-    });
+    };
 
     const info = extractSchemaInfo(schema);
 
@@ -105,9 +105,9 @@ describe('env-parser', () => {
   });
 
   it('process.env takes precedence over env file', () => {
-    const schema = z.object({
+    const schema = {
       port: z.number(),
-    });
+    };
 
     const info = extractSchemaInfo(schema);
 

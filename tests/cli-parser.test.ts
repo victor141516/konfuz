@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { parseCliArguments } from '../src/cli-parser';
 import { extractSchemaInfo } from '../src/schema-transformer';
 import { z } from 'zod';
@@ -29,9 +29,9 @@ describe('cli-parser', () => {
   }
 
   it('parses string CLI arguments', () => {
-    const schema = z.object({
+    const schema = {
       host: z.string(),
-    });
+    };
 
     const info = extractSchemaInfo(schema);
 
@@ -43,9 +43,9 @@ describe('cli-parser', () => {
   });
 
   it('parses number CLI arguments', () => {
-    const schema = z.object({
+    const schema = {
       port: z.number(),
-    });
+    };
 
     const info = extractSchemaInfo(schema);
 
@@ -57,9 +57,9 @@ describe('cli-parser', () => {
   });
 
   it('parses boolean CLI arguments', () => {
-    const schema = z.object({
+    const schema = {
       verbose: z.boolean(),
-    });
+    };
 
     const info = extractSchemaInfo(schema);
 
@@ -71,10 +71,10 @@ describe('cli-parser', () => {
   });
 
   it('applies default values for missing arguments', () => {
-    const schema = z.object({
+    const schema = {
       port: z.number().default(3000),
       host: z.string().default('localhost'),
-    });
+    };
 
     const info = extractSchemaInfo(schema);
 
@@ -87,9 +87,9 @@ describe('cli-parser', () => {
   });
 
   it('converts kebab-case to camelCase', () => {
-    const schema = z.object({
+    const schema = {
       databaseHost: z.string(),
-    });
+    };
 
     const info = extractSchemaInfo(schema);
 
@@ -101,9 +101,9 @@ describe('cli-parser', () => {
   });
 
   it('returns empty config when no arguments provided', () => {
-    const schema = z.object({
+    const schema = {
       port: z.number(),
-    });
+    };
 
     const info = extractSchemaInfo(schema);
 

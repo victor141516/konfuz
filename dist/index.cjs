@@ -29,6 +29,12 @@ let yargs = require("yargs");
 yargs = __toESM(yargs);
 let yargs_helpers = require("yargs/helpers");
 //#region src/schema-transformer.ts
+/**
+* Creates a configuration field with custom env var and/or CLI flag names.
+*
+* @example
+* customConfigElement(z.number(), { envName: 'SERVER_PORT', cmdShort: 'p' })
+*/
 function customConfigElement(type, options) {
 	return {
 		type,
@@ -38,13 +44,16 @@ function customConfigElement(type, options) {
 		cmdDescription: options?.cmdDescription
 	};
 }
+/** Converts a camelCase key to UPPER_SNAKE_CASE (e.g. `databaseHost` → `DATABASE_HOST`). */
 function toEnvName(key) {
 	return key.replace(/([a-z])([A-Z])/g, "$1_$2").replace(/([A-Z])([A-Z][a-z])/g, "$1_$2").toUpperCase();
 }
+/** Converts a camelCase key to kebab-case (e.g. `databaseHost` → `database-host`). */
 function toCliName(key) {
 	return key.replace(/([a-z])([A-Z])/g, "$1-$2").replace(/([A-Z])([A-Z][a-z])/g, "$1-$2").toLowerCase();
 }
-function getFieldType(schema) {
+/** Unwraps Zod wrapper types (Optional, Default) to determine the core FieldType. */
+function inferFieldType(schema) {
 	if (schema instanceof zod.z.ZodString) return { type: "string" };
 	if (schema instanceof zod.z.ZodNumber) return { type: "number" };
 	if (schema instanceof zod.z.ZodBoolean) return { type: "boolean" };
@@ -52,51 +61,54 @@ function getFieldType(schema) {
 		type: "enum",
 		enumValues: schema.options
 	};
-	if (schema instanceof zod.z.ZodDefault) return getFieldType(schema._def.innerType);
-	if (schema instanceof zod.z.ZodOptional) return getFieldType(schema._def.innerType);
+	if (schema instanceof zod.z.ZodDefault) return inferFieldType(schema._def.innerType);
+	if (schema instanceof zod.z.ZodOptional) return inferFieldType(schema._def.innerType);
 	return { type: "string" };
 }
-function hasDefault(schema) {
-	if (schema instanceof zod.z.ZodDefault) return true;
-	return false;
-}
-function getDefaultValue(schema) {
+/**
+* Returns the default value declared on a `ZodDefault` schema, or `undefined`
+* if the schema has no default.
+*/
+function extractDefaultValue(schema) {
 	if (schema instanceof zod.z.ZodDefault) {
 		const defaultValue = schema._def.defaultValue;
-		if (typeof defaultValue === "function") return defaultValue();
-		return defaultValue;
+		return typeof defaultValue === "function" ? defaultValue() : defaultValue;
 	}
 }
-function isOptional(schema) {
+/** Returns `true` when the schema allows the field to be absent at parse time. */
+function isFieldOptional(schema) {
 	if (schema instanceof zod.z.ZodOptional) return true;
 	if (schema instanceof zod.z.ZodDefault) return true;
-	if (schema instanceof zod.z.ZodReadonly) return isOptional(schema._def.innerType);
+	if (schema instanceof zod.z.ZodReadonly) return isFieldOptional(schema._def.innerType);
 	return false;
 }
-function isCustomConfigElement(value) {
+/** Type guard: returns `true` when a config entry is a `FieldConfig` rather than a bare Zod schema. */
+function isFieldConfig(value) {
 	return typeof value === "object" && value !== null && "type" in value && value.type instanceof zod.z.ZodType;
 }
+/**
+* Analyses a user-provided config object (or `z.ZodObject`) and returns a
+* `SchemaDescriptor` containing per-field metadata and the raw Zod schemas.
+*/
 function extractSchemaInfo(config) {
 	const fields = [];
-	const shape = {};
-	let entries;
-	if (config instanceof zod.z.ZodObject) entries = Object.entries(config.shape);
-	else entries = Object.entries(config);
+	const zodSchemas = {};
+	const entries = config instanceof zod.z.ZodObject ? Object.entries(config.shape) : Object.entries(config);
 	for (const [key, value] of entries) {
 		let schema;
 		let customEnvName;
 		let customCmdName;
 		let customCmdNameShort;
 		let customCmdDescription;
-		if (isCustomConfigElement(value)) {
+		if (isFieldConfig(value)) {
 			schema = value.type;
 			customEnvName = value.envName;
 			customCmdName = value.cmdName;
 			customCmdNameShort = value.cmdNameShort;
 			customCmdDescription = value.cmdDescription;
 		} else schema = value;
-		shape[key] = schema;
-		const { type, enumValues } = getFieldType(schema);
+		zodSchemas[key] = schema;
+		const { type, enumValues } = inferFieldType(schema);
 		fields.push({
 			name: key,
 			envName: customEnvName ?? toEnvName(key),
@@ -104,25 +116,35 @@ function extractSchemaInfo(config) {
 			cmdNameShort: customCmdNameShort,
 			cmdDescription: customCmdDescription,
 			type,
-			isOptional: isOptional(schema),
-			defaultValue: hasDefault(schema) ? getDefaultValue(schema) : void 0,
+			isOptional: isFieldOptional(schema),
+			defaultValue: extractDefaultValue(schema),
 			enumValues
 		});
 	}
 	return {
 		fields,
-		shape
+		zodSchemas
 	};
 }
+/**
+* Extracts all default values from a Zod shape (the `.shape` property of a
+* `z.ZodObject`), returning them as a plain key/value record.
+*/
 function extractDefaults(shape) {
 	const defaults = {};
-	for (const [key, value] of Object.entries(shape)) if (hasDefault(value)) defaults[key] = getDefaultValue(value);
+	for (const [key, schema] of Object.entries(shape)) {
+		const defaultValue = extractDefaultValue(schema);
+		if (defaultValue !== void 0) defaults[key] = defaultValue;
+	}
 	return defaults;
 }
+/**
+* Converts a `ConfigInput` into a `z.ZodObject` suitable for final validation
+* with `safeParse()`.
+*/
 function normalizeToZodObject(config) {
 	const shape = {};
-	for (const [key, value] of Object.entries(config)) if (isCustomConfigElement(value)) shape[key] = value.type;
-	else shape[key] = value;
+	for (const [key, value] of Object.entries(config)) shape[key] = isFieldConfig(value) ? value.type : value;
 	return zod.z.object(shape);
 }
 //#endregion

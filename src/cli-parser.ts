@@ -1,13 +1,13 @@
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
-import { SchemaInfo } from './schema-transformer';
+import { SchemaDescriptor } from './schema-transformer';
 import { globalGenerator } from './short-param';
 
 export interface CliConfig {
   [key: string]: string | number | boolean | undefined;
 }
 
-export function parseCliArguments(info: SchemaInfo): CliConfig {
+export function parseCliArguments(info: SchemaDescriptor): CliConfig {
   const argv = hideBin(process.argv);
   const config: CliConfig = {};
 
