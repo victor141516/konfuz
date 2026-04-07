@@ -1,4 +1,5 @@
-import { ConfigField, SchemaInfo } from './schema-transformer';
+import { z } from 'zod';
+import { ConfigFieldType, SchemaInfo } from './schema-transformer';
 
 export interface EnvFileConfig {
   [key: string]: string;
@@ -17,38 +18,46 @@ export function parseEnvVariables(
   for (const field of info.fields) {
     const envValue = process.env[field.envName];
     if (envValue !== undefined) {
-      config[field.name] = convertValue(envValue, field.type);
+      config[field.name] = parseWithZod(envValue, field.type, field.enumValues);
     }
   }
 
   for (const [key, value] of Object.entries(envFileConfig)) {
     const field = info.fields.find((f) => f.envName === key);
     if (field && value !== undefined && config[field.name] === undefined) {
-      config[field.name] = convertValue(value, field.type);
+      config[field.name] = parseWithZod(value, field.type, field.enumValues);
     }
   }
 
   return config;
 }
 
-function convertValue(
-  value: string,
-  type: ConfigField['type']
-): string | number | boolean {
+function getCoercionSchema(
+  type: ConfigFieldType,
+  enumValues?: string[]
+): z.ZodType {
   switch (type) {
     case 'number':
-      return Number(value);
+      return z.coerce.number();
     case 'boolean':
-      return isTruthyBoolean(value);
+      return z.coerce.boolean();
     case 'enum':
-      return value;
+      return z.enum(enumValues as [string, ...string[]]);
     case 'string':
     default:
-      return value;
+      return z.string();
   }
 }
 
-function isTruthyBoolean(value: string): boolean {
-  const lower = value.toLowerCase();
-  return lower === 'true' || lower === '1' || lower === 'yes';
+function parseWithZod(
+  value: string,
+  type: ConfigFieldType,
+  enumValues?: string[]
+): string | number | boolean | undefined {
+  const schema = getCoercionSchema(type, enumValues);
+  const result = schema.safeParse(value);
+  if (result.success) {
+    return result.data as string | number | boolean;
+  }
+  return undefined;
 }

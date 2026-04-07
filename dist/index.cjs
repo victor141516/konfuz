@@ -141,25 +141,25 @@ function parseEnvVariables(info, envFileConfig) {
 	const config = {};
 	for (const field of info.fields) {
 		const envValue = process.env[field.envName];
-		if (envValue !== void 0) config[field.name] = convertValue(envValue, field.type);
+		if (envValue !== void 0) config[field.name] = parseWithZod(envValue, field.type, field.enumValues);
 	}
 	for (const [key, value] of Object.entries(envFileConfig)) {
 		const field = info.fields.find((f) => f.envName === key);
-		if (field && value !== void 0 && config[field.name] === void 0) config[field.name] = convertValue(value, field.type);
+		if (field && value !== void 0 && config[field.name] === void 0) config[field.name] = parseWithZod(value, field.type, field.enumValues);
 	}
 	return config;
 }
-function convertValue(value, type) {
+function getCoercionSchema(type, enumValues) {
 	switch (type) {
-		case "number": return Number(value);
-		case "boolean": return isTruthyBoolean(value);
-		case "enum": return value;
-		default: return value;
+		case "number": return zod.z.coerce.number();
+		case "boolean": return zod.z.coerce.boolean();
+		case "enum": return zod.z.enum(enumValues);
+		default: return zod.z.string();
 	}
 }
-function isTruthyBoolean(value) {
-	const lower = value.toLowerCase();
-	return lower === "true" || lower === "1" || lower === "yes";
+function parseWithZod(value, type, enumValues) {
+	const result = getCoercionSchema(type, enumValues).safeParse(value);
+	if (result.success) return result.data;
 }
 //#endregion
 //#region src/short-param.ts
