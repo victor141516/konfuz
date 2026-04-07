@@ -96,6 +96,43 @@ describe('configure', () => {
     expect(config.port).toBe(7000);
   });
 
+  it('CLI arguments with collisions', () => {
+    mockArgs([
+      '-p',
+      '1',
+      '--pa',
+      '2',
+      '--pab',
+      '3',
+      '--pabp',
+      '4',
+      '-a',
+      '5',
+      '-b',
+      '6',
+      '-c',
+      '7',
+    ]);
+
+    const config = configure({
+      port: z.number(),
+      portAlternative: z.number(),
+      portAmigoBarcelona: z.number(),
+      portAluminumBagettePractice: z.number(),
+      potato: z.number(),
+      path: z.number(),
+      another: z.number(),
+    });
+
+    expect(config.port).toBe(1);
+    expect(config.portAlternative).toBe(2);
+    expect(config.portAmigoBarcelona).toBe(3);
+    expect(config.portAluminumBagettePractice).toBe(4);
+    expect(config.potato).toBe(5);
+    expect(config.path).toBe(6);
+    expect(config.another).toBe(7);
+  });
+
   it('validates configuration against schema', () => {
     writeFileSync(envPath, 'PORT=not-a-number\n');
 

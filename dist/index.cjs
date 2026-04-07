@@ -28,6 +28,8 @@ let path = require("path");
 let yargs = require("yargs");
 yargs = __toESM(yargs);
 let yargs_helpers = require("yargs/helpers");
+let change_case = require("change-case");
+change_case = __toESM(change_case);
 //#region src/schema-transformer.ts
 /**
 * Creates a configuration field with custom env var and/or CLI flag names.
@@ -185,40 +187,39 @@ function parseWithZod(value, type, enumValues) {
 }
 //#endregion
 //#region src/short-param.ts
+const base = "abcdefghijklmnopqrstuvwxyz".split("");
+function decode(id) {
+	let result = "";
+	let rest = id;
+	while (rest > 0) {
+		result = base[rest % base.length] + result;
+		rest = Math.floor(rest / base.length);
+	}
+	return result || "a";
+}
 var ShortParamGenerator = class {
 	assigned = /* @__PURE__ */ new Map();
 	usedShortParams = /* @__PURE__ */ new Set();
 	alphabetIndex = 0;
-	alphabet = "abcdefghijklmnopqrstuvwxyz".split("");
 	getWords(name) {
-		return name.split(/-/).filter((w) => w.length > 0);
+		return change_case.noCase(name).split(" ");
 	}
-	getNextAlphabetChar() {
-		const char = this.alphabet[this.alphabetIndex];
-		this.alphabetIndex++;
-		return char;
+	getNextAvailableAlphabet() {
+		while (true) {
+			const label = decode(this.alphabetIndex);
+			if (!this.usedShortParams.has(label)) return label;
+			this.alphabetIndex++;
+		}
 	}
 	generate(name) {
 		const words = this.getWords(name);
-		if (words.length === 0) return this.getNextAlphabetChar();
 		for (let numWords = 1; numWords <= words.length; numWords++) {
 			const base = words.slice(0, numWords).map((w) => w[0].toLowerCase()).join("");
 			if (!this.usedShortParams.has(base)) return base;
 		}
-		const lastWord = words[words.length - 1];
-		for (let extraLen = 2; extraLen <= lastWord.length; extraLen++) {
-			const base = words.slice(0, -1).map((w) => w[0].toLowerCase()).join("") + lastWord.slice(0, extraLen).toLowerCase();
-			if (!this.usedShortParams.has(base)) return base;
-		}
-		return this.getNextAlphabetChar();
+		return this.getNextAvailableAlphabet();
 	}
-	getShortParam(name, customParam) {
-		if (customParam && (customParam.startsWith("--") || customParam.startsWith("-"))) {
-			const shortParam = customParam.startsWith("--") ? customParam.slice(2) : customParam.slice(1);
-			this.usedShortParams.add(shortParam);
-			this.assigned.set(name, shortParam);
-			return shortParam;
-		}
+	getShortParam(name) {
 		if (this.assigned.has(name)) return this.assigned.get(name);
 		const shortParam = this.generate(name);
 		this.usedShortParams.add(shortParam);
@@ -245,7 +246,7 @@ function parseCliArguments(info) {
 	let y = (0, yargs.default)(argv);
 	for (const field of info.fields) {
 		const cliName = field.cmdName;
-		const shortParam = field.cmdNameShort ? globalGenerator.getShortParam(field.name, field.cmdNameShort) : globalGenerator.getShortParam(field.name, cliName);
+		const shortParam = field.cmdNameShort ? field.cmdNameShort : globalGenerator.getShortParam(field.name);
 		if (field.type === "number") y = y.number(cliName);
 		else y = y.string(cliName);
 		const options = {};

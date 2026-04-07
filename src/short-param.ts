@@ -1,24 +1,39 @@
+import * as changeCase from 'change-case';
+
+const base = 'abcdefghijklmnopqrstuvwxyz'.split('');
+
+function decode(id: number): string {
+  let result = '';
+  let rest = id;
+  while (rest > 0) {
+    const index = rest % base.length;
+    result = base[index] + result;
+    rest = Math.floor(rest / base.length);
+  }
+  return result || 'a';
+}
+
 export class ShortParamGenerator {
   private assigned: Map<string, string> = new Map();
   private usedShortParams: Set<string> = new Set();
   private alphabetIndex = 0;
-  private readonly alphabet = 'abcdefghijklmnopqrstuvwxyz'.split('');
 
   private getWords(name: string): string[] {
-    return name.split(/-/).filter((w) => w.length > 0);
+    return changeCase.noCase(name).split(' ');
   }
 
-  private getNextAlphabetChar(): string {
-    const char = this.alphabet[this.alphabetIndex];
-    this.alphabetIndex++;
-    return char;
+  private getNextAvailableAlphabet(): string {
+    while (true) {
+      const label = decode(this.alphabetIndex);
+      if (!this.usedShortParams.has(label)) {
+        return label;
+      }
+      this.alphabetIndex++;
+    }
   }
 
   private generate(name: string): string {
     const words = this.getWords(name);
-    if (words.length === 0) {
-      return this.getNextAlphabetChar();
-    }
 
     for (let numWords = 1; numWords <= words.length; numWords++) {
       const base = words
@@ -30,34 +45,10 @@ export class ShortParamGenerator {
       }
     }
 
-    const lastWord = words[words.length - 1];
-    for (let extraLen = 2; extraLen <= lastWord.length; extraLen++) {
-      const prefixLetters = words
-        .slice(0, -1)
-        .map((w) => w[0].toLowerCase())
-        .join('');
-      const base = prefixLetters + lastWord.slice(0, extraLen).toLowerCase();
-      if (!this.usedShortParams.has(base)) {
-        return base;
-      }
-    }
-
-    return this.getNextAlphabetChar();
+    return this.getNextAvailableAlphabet();
   }
 
-  public getShortParam(name: string, customParam?: string): string {
-    if (
-      customParam &&
-      (customParam.startsWith('--') || customParam.startsWith('-'))
-    ) {
-      const shortParam = customParam.startsWith('--')
-        ? customParam.slice(2)
-        : customParam.slice(1);
-      this.usedShortParams.add(shortParam);
-      this.assigned.set(name, shortParam);
-      return shortParam;
-    }
-
+  public getShortParam(name: string): string {
     if (this.assigned.has(name)) {
       return this.assigned.get(name)!;
     }

@@ -27,8 +27,8 @@ export function parseCliArguments(info: SchemaDescriptor): CliConfig {
   for (const field of info.fields) {
     const cliName = field.cmdName;
     const shortParam = field.cmdNameShort
-      ? globalGenerator.getShortParam(field.name, field.cmdNameShort)
-      : globalGenerator.getShortParam(field.name, cliName);
+      ? field.cmdNameShort
+      : globalGenerator.getShortParam(field.name);
 
     if (field.type === 'number') {
       y = y.number(cliName);

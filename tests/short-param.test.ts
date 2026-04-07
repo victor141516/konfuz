@@ -17,7 +17,7 @@ describe('short-param', () => {
       const generator = new ShortParamGenerator();
       expect(generator.getShortParam('port')).toBe('p');
       expect(generator.getShortParam('host')).toBe('h');
-      expect(generator.getShortParam('package')).toBe('pa');
+      expect(generator.getShortParam('port-alternative')).toBe('pa');
     });
 
     it('handles kebab-case names', () => {
@@ -32,11 +32,6 @@ describe('short-param', () => {
       expect(generator.getShortParam('c')).toBe('c');
     });
 
-    it('uses custom param if provided and starts with dash', () => {
-      const generator = new ShortParamGenerator();
-      expect(generator.getShortParam('port', '--custom')).toBe('custom');
-    });
-
     it('returns cached short param for same name', () => {
       const generator = new ShortParamGenerator();
       expect(generator.getShortParam('port')).toBe('p');
@@ -46,9 +41,23 @@ describe('short-param', () => {
     it('handles complex collision scenarios', () => {
       const generator = new ShortParamGenerator();
       expect(generator.getShortParam('port')).toBe('p');
-      expect(generator.getShortParam('package')).toBe('pa');
-      expect(generator.getShortParam('path')).toBe('pat');
-      expect(generator.getShortParam('another')).toBe('a');
+      expect(generator.getShortParam('port-alternative')).toBe('pa');
+      expect(generator.getShortParam('port-amigo-barcelona')).toBe('pab');
+      expect(generator.getShortParam('port-aluminum-bagette-practice')).toBe(
+        'pabp'
+      );
+      expect(generator.getShortParam('potato')).toBe('a');
+      expect(generator.getShortParam('path')).toBe('b');
+      expect(generator.getShortParam('another')).toBe('c');
+    });
+
+    it('alphabetically can collide infinitely', () => {
+      const generator = new ShortParamGenerator();
+      const shorts = new Set<string>();
+      for (let i = 0; i < 200; i++) {
+        shorts.add(generator.getShortParam('port' + i));
+      }
+      expect(shorts.size).toBe(200);
     });
   });
 
