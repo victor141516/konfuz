@@ -231,4 +231,76 @@ describe('configure', () => {
 
     expect(config.serverPort).toBe(7500);
   });
+
+  describe('boolean parsing', () => {
+    it('parameter without value should give true', () => {
+      mockArgs(['--enabled']);
+
+      const config = configure({
+        enabled: z.boolean(),
+      });
+
+      expect(config.enabled).toBe(true);
+    });
+
+    it('with --no-[parameter] should give false', () => {
+      mockArgs(['--no-enabled']);
+
+      const config = configure({
+        enabled: z.boolean(),
+      });
+
+      expect(config.enabled).toBe(false);
+    });
+
+    it('without parameter should give false', () => {
+      mockArgs([]);
+
+      const config = configure({
+        enabled: z.boolean().default(false),
+      });
+
+      expect(config.enabled).toBe(false);
+    });
+
+    it('parameter with truthy and space separated value should give true', () => {
+      mockArgs(['--enabled', '1']);
+
+      const config = configure({
+        enabled: z.boolean(),
+      });
+
+      expect(config.enabled).toBe(true);
+    });
+
+    it('parameter with truthy and = separated value should give true', () => {
+      mockArgs(['--enabled=1']);
+
+      const config = configure({
+        enabled: z.boolean(),
+      });
+
+      expect(config.enabled).toBe(true);
+    });
+
+    it('parameter with falsy and space separated value should give true', () => {
+      mockArgs(['--enabled', '0']);
+
+      const config = configure({
+        enabled: z.boolean(),
+      });
+
+      expect(config.enabled).toBe(false);
+    });
+
+    it('parameter with falsy and = separated value should give true', () => {
+      mockArgs(['--enabled=0']);
+
+      const config = configure({
+        enabled: z.boolean(),
+      });
+
+      expect(config.enabled).toBe(false);
+    });
+  });
 });

@@ -37,8 +37,8 @@ function inferFieldType(schema) {
 		type: "enum",
 		enumValues: schema.options
 	};
-	if (schema instanceof z.ZodDefault) return inferFieldType(schema._def.innerType);
-	if (schema instanceof z.ZodOptional) return inferFieldType(schema._def.innerType);
+	if (schema instanceof z.ZodDefault) return inferFieldType(schema.def.innerType);
+	if (schema instanceof z.ZodOptional) return inferFieldType(schema.def.innerType);
 	return { type: "string" };
 }
 /**
@@ -55,7 +55,7 @@ function extractDefaultValue(schema) {
 function isFieldOptional(schema) {
 	if (schema instanceof z.ZodOptional) return true;
 	if (schema instanceof z.ZodDefault) return true;
-	if (schema instanceof z.ZodReadonly) return isFieldOptional(schema._def.innerType);
+	if (schema instanceof z.ZodReadonly) return isFieldOptional(schema.def.innerType);
 	return false;
 }
 /** Type guard: returns `true` when a config entry is a `FieldConfig` rather than a bare Zod schema. */
@@ -69,7 +69,7 @@ function isFieldConfig(value) {
 function extractSchemaInfo(config) {
 	const fields = [];
 	const zodSchemas = {};
-	const entries = config instanceof z.ZodObject ? Object.entries(config.shape) : Object.entries(config);
+	const entries = Object.entries(config);
 	for (const [key, value] of entries) {
 		let schema;
 		let customEnvName;
@@ -222,8 +222,7 @@ function parseCliArguments(info) {
 	for (const field of info.fields) {
 		const cliName = field.cmdName;
 		const shortParam = field.cmdNameShort ? globalGenerator.getShortParam(field.name, field.cmdNameShort) : globalGenerator.getShortParam(field.name, cliName);
-		if (field.type === "boolean") y = y.boolean(cliName);
-		else if (field.type === "number") y = y.number(cliName);
+		if (field.type === "number") y = y.number(cliName);
 		else y = y.string(cliName);
 		const options = {};
 		if (field.enumValues) options.choices = field.enumValues;
@@ -236,10 +235,32 @@ function parseCliArguments(info) {
 	const parsed = y.argv;
 	for (const field of info.fields) {
 		const value = parsed[field.cmdName];
-		if (value !== void 0) config[field.name] = value;
+		if (value !== void 0) if (field.type === "boolean") config[field.name] = coerceBooleanField(value);
+		else config[field.name] = value;
 		else if (field.defaultValue !== void 0) config[field.name] = field.defaultValue;
 	}
 	return config;
+}
+/**
+* Determines the boolean value for a CLI flag by inspecting the raw argv.
+*
+* Yargs' `.boolean()` coercion is inconsistent:
+*   --flag        → yargs omits it from output (undefined)  → treat as true
+*   --flag 1      → yargs returns "1" (string)             → treat as true
+*   --flag 0      → yargs returns "0" (string)             → treat as false
+*   --flag=true   → yargs returns "true" (string)         → treat as true
+*   --flag=false  → yargs returns "false" (string)         → treat as false
+*   --flag=1      → yargs returns "1" (string)             → treat as true
+*   --flag=0      → yargs returns "0" (string)             → treat as false
+*   --flag=yes    → yargs returns "yes" (string)           → treat as true
+*   --flag=no     → yargs returns "no" (string)            → treat as false
+*   --no-flag     → yargs returns false (boolean)          → treat as false
+*/
+function coerceBooleanField(yargsValue) {
+	if (typeof yargsValue === "boolean") return false;
+	if (yargsValue === "") return true;
+	const lower = yargsValue.toLowerCase();
+	return lower === "true" || lower === "1" || lower === "yes";
 }
 //#endregion
 //#region src/index.ts
