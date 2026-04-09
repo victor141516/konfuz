@@ -7,8 +7,11 @@ export interface CliConfig {
   [key: string]: string | number | boolean | undefined;
 }
 
-export function parseCliArguments(info: SchemaDescriptor): CliConfig {
-  const argv = hideBin(process.argv);
+export function parseCliArguments(
+  info: SchemaDescriptor,
+  options?: { argv?: string[] }
+): CliConfig {
+  const argv = options?.argv ?? hideBin(process.argv);
   const config: CliConfig = {};
 
   globalGenerator.reset();

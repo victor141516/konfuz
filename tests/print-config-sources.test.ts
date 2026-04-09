@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { printConfiguredSources } from '../src/print-config-sources';
+import { loadEnvFile } from '../src/loader';
 import { z } from 'zod';
 import { writeFileSync, unlinkSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
@@ -108,6 +109,8 @@ describe('printConfiguredSources', () => {
     writeFileSync(base, 'PORT=3000\nHOST=localhost\n');
     writeFileSync(override, 'HOST=prod.example.com\n');
 
+    const envFileConfig = loadEnvFile([base, override]);
+
     const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
     printConfiguredSources(
@@ -116,6 +119,7 @@ describe('printConfiguredSources', () => {
     );
 
     const output = spy.mock.calls.join(' ');
+    expect(envFileConfig).toEqual({ PORT: '3000', HOST: 'prod.example.com' });
     expect(output).toMatch(/port.*\(envFile\)/);
     expect(output).toMatch(/host.*\(envFile\)/);
     spy.mockRestore();

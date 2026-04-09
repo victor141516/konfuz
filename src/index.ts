@@ -11,6 +11,8 @@ import { loadEnvFile, type EnvFileConfig } from './loader';
 import { parseEnvVariables } from './env-parser';
 import { parseCliArguments, type CliConfig } from './cli-parser';
 import { formatValidationError } from './error-formatter';
+import { printConfiguredSources } from './print-config-sources';
+import { validateSupportedSchemas } from './validate-schemas';
 
 export interface ParseMyConfOptions {
   envPath?: string | string[];
@@ -31,6 +33,8 @@ export function configure<T extends ConfigInput>(
   config: T,
   options?: ParseMyConfOptions
 ): InferConfig<T> {
+  validateSupportedSchemas(config as ConfigInput);
+
   const info = extractSchemaInfo(config as ConfigInput);
 
   const schema: z.ZodObject<Record<string, z.ZodTypeAny>> =
@@ -67,3 +71,4 @@ export function configure<T extends ConfigInput>(
 }
 
 export { toEnvName, toCliName } from './schema-transformer';
+export { printConfiguredSources } from './print-config-sources';
