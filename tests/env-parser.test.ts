@@ -26,7 +26,7 @@ describe('env-parser', () => {
     process.env.PORT = '3000';
     process.env.HOST = 'localhost';
 
-    const config = parseEnvVariables(info, {});
+    const { config } = parseEnvVariables(info, {});
 
     expect(config.port).toBe(3000);
     expect(config.host).toBe('localhost');
@@ -41,7 +41,7 @@ describe('env-parser', () => {
 
     process.env.PORT = '8080';
 
-    const config = parseEnvVariables(info, {});
+    const { config } = parseEnvVariables(info, {});
 
     expect(config.port).toBe(8080);
     expect(typeof config.port).toBe('number');
@@ -56,7 +56,7 @@ describe('env-parser', () => {
 
     process.env.ENABLE_CACHE = 'true';
 
-    const config = parseEnvVariables(info, {});
+    const { config } = parseEnvVariables(info, {});
 
     expect(config.enableCache).toBe(true);
   });
@@ -76,7 +76,7 @@ describe('env-parser', () => {
     process.env.FLAG3 = 'yes';
     process.env.FLAG4 = 'TRUE';
 
-    const config = parseEnvVariables(info, {});
+    const { config } = parseEnvVariables(info, {});
 
     expect(config.flag1).toBe(true);
     expect(config.flag2).toBe(true);
@@ -98,7 +98,7 @@ describe('env-parser', () => {
       PORT: '9000',
     };
 
-    const config = parseEnvVariables(info, envFileConfig);
+    const { config } = parseEnvVariables(info, envFileConfig);
 
     expect(config.port).toBe(9000);
     expect(config.host).toBe('env-host');
@@ -117,8 +117,29 @@ describe('env-parser', () => {
       PORT: '9000',
     };
 
-    const config = parseEnvVariables(info, envFileConfig);
+    const { config } = parseEnvVariables(info, envFileConfig);
 
     expect(config.port).toBe(4000);
+  });
+
+  it('includes raw values in the result', () => {
+    const info = extractSchemaInfo({ port: z.number(), host: z.string() });
+    process.env.PORT = '3000';
+    process.env.HOST = 'localhost';
+
+    const { rawValues } = parseEnvVariables(info, {});
+
+    expect(rawValues.port).toBe('3000');
+    expect(rawValues.host).toBe('localhost');
+  });
+
+  it('captures raw value even when coercion fails', () => {
+    const info = extractSchemaInfo({ port: z.number() });
+    process.env.PORT = 'not-a-number';
+
+    const { config, rawValues } = parseEnvVariables(info, {});
+
+    expect(config.port).toBeUndefined();
+    expect(rawValues.port).toBe('not-a-number');
   });
 });
