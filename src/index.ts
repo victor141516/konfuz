@@ -8,8 +8,9 @@ import {
   type ConfigInput,
 } from './schema-transformer';
 import { loadEnvFile, type EnvFileConfig } from './loader';
-import { parseEnvVariables, type EnvConfig } from './env-parser';
+import { parseEnvVariables } from './env-parser';
 import { parseCliArguments, type CliConfig } from './cli-parser';
+import { formatValidationError } from './error-formatter';
 
 export interface ParseMyConfOptions {
   envPath?: string | string[];
@@ -41,7 +42,10 @@ export function configure<T extends ConfigInput>(
     ? loadEnvFile(options.envPath)
     : loadEnvFile();
 
-  const envConfig: EnvConfig = parseEnvVariables(info, envFileConfig);
+  const { config: envConfig, rawValues } = parseEnvVariables(
+    info,
+    envFileConfig
+  );
 
   const cliConfig: CliConfig = parseCliArguments(info);
 
@@ -54,10 +58,9 @@ export function configure<T extends ConfigInput>(
   const result = schema.safeParse(merged);
 
   if (!result.success) {
-    const errors = result.error.issues
-      .map((e) => `${e.path.join('.')}: ${e.message}`)
-      .join(', ');
-    throw new Error(`Configuration validation failed: ${errors}`);
+    throw new Error(
+      formatValidationError(result.error, info, merged, rawValues)
+    );
   }
 
   return result.data as InferConfig<T>;
