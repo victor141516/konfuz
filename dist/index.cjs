@@ -57,7 +57,7 @@ function toEnvName(key) {
 function toCliName(key) {
 	return key.replace(/([a-z])([A-Z])/g, "$1-$2").replace(/([A-Z])([A-Z][a-z])/g, "$1-$2").toLowerCase();
 }
-/** Unwraps Zod wrapper types (Optional, Default) to determine the core FieldType. */
+/** Unwraps Zod wrapper types (Default, Optional, Nullable, Readonly) to determine the core FieldType. */
 function inferFieldType(schema) {
 	if (schema instanceof zod.z.ZodString) return { type: "string" };
 	if (schema instanceof zod.z.ZodNumber) return { type: "number" };
@@ -68,6 +68,8 @@ function inferFieldType(schema) {
 	};
 	if (schema instanceof zod.z.ZodDefault) return inferFieldType(schema.def.innerType);
 	if (schema instanceof zod.z.ZodOptional) return inferFieldType(schema.def.innerType);
+	if (schema instanceof zod.z.ZodNullable) return inferFieldType(schema.def.innerType);
+	if (schema instanceof zod.z.ZodReadonly) return inferFieldType(schema.def.innerType);
 	return { type: "string" };
 }
 /**
@@ -376,8 +378,10 @@ function getFinalValueStyle(value, source, isSecret) {
 	}
 }
 function printConfiguredSources(configResult) {
+	if (typeof configResult !== "object" || configResult === null) throw new Error("This is not a Konfuz configuration");
+	if (!("__$sources__" in configResult)) throw new Error("This is not a Konfuz configuration");
+	if (!configResult.__$sources__) throw new Error("This is not a Konfuz configuration");
 	const sources = configResult.__$sources__;
-	if (!sources) throw new Error("This is not a Konfuz configuration");
 	const fieldNames = Object.keys(configResult).filter((k) => !k.startsWith("__"));
 	const tableData = [[
 		STYLES.bold("Field"),
@@ -483,7 +487,6 @@ function configure(config, options) {
 	}
 	const result = schema.safeParse(merged);
 	if (!result.success) {
-		result.error.__$sources__ = sources;
 		const errors = result.error.issues.map((issue) => {
 			const fieldName = String(issue.path[0]);
 			if (info.fields.find((f) => f.name === fieldName)?.secret) return `${fieldName}: ***`;
@@ -492,12 +495,7 @@ function configure(config, options) {
 		throw new Error(`Configuration validation failed: ${errors}`);
 	}
 	const data = result.data;
-	Object.defineProperty(data, "__$sources__", {
-		value: sources,
-		enumerable: false,
-		writable: true,
-		configurable: true
-	});
+	data.__$sources__ = sources;
 	return data;
 }
 //#endregion

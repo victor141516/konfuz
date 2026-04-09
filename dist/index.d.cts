@@ -1,7 +1,24 @@
 import { z } from "zod";
 
 //#region src/schema-transformer.d.ts
-type SupportedZodTypes = z.ZodNumber | z.ZodString | z.ZodBoolean | z.ZodEnum;
+/** The four core primitive Zod types the library can coerce from strings. */
+type ZodCoreTypes = z.ZodString | z.ZodNumber | z.ZodBoolean | z.ZodEnum;
+/**
+ * Modifier wrappers that may legally surround a supported core type:
+ * `.default()`, `.optional()`, `.nullable()`, `.readonly()`.
+ */
+type ZodModifier<T extends z.ZodTypeAny> = z.ZodDefault<T> | z.ZodOptional<T> | z.ZodNullable<T> | z.ZodReadonly<T>;
+/**
+ * A Zod schema accepted by this library: one of the four supported primitives
+ * (`string`, `number`, `boolean`, `enum`), optionally wrapped any number of
+ * times by `.default()`, `.optional()`, `.nullable()`, or `.readonly()`.
+ *
+ * Up to four levels of wrapping are supported, which covers every realistic
+ * use-case (e.g. `z.number().default(0).nullable().optional()` is valid).
+ * Unsupported types such as `z.date()` or `z.array(z.string())` are rejected
+ * at the TypeScript level.
+ */
+type SupportedZodTypes = ZodCoreTypes | ZodModifier<ZodCoreTypes> | ZodModifier<ZodModifier<ZodCoreTypes>> | ZodModifier<ZodModifier<ZodModifier<ZodCoreTypes>>> | ZodModifier<ZodModifier<ZodModifier<ZodModifier<ZodCoreTypes>>>>;
 type SimpleType = 'string' | 'number' | 'boolean';
 type ConfigFieldType = SupportedZodTypes | SimpleType;
 /**
@@ -52,11 +69,7 @@ declare function toEnvName(key: string): string;
 declare function toCliName(key: string): string;
 //#endregion
 //#region src/print-config-sources.d.ts
-interface ConfigResult {
-  __$sources__?: Record<string, ConfigSourceEntry>;
-  [key: string]: unknown;
-}
-declare function printConfiguredSources(configResult: ConfigResult): void;
+declare function printConfiguredSources(configResult: unknown): void;
 //#endregion
 //#region src/index.d.ts
 interface ParseMyConfOptions {
@@ -78,13 +91,6 @@ interface ConfigSourceEntry {
   cli?: SourceValue;
   secret?: boolean;
 }
-declare module 'zod' {
-  interface ZodError {
-    __$sources__?: Record<string, ConfigSourceEntry>;
-  }
-}
-declare function configure<T extends ConfigInput>(config: T, options?: ParseMyConfOptions): InferConfig<T> & {
-  __$sources__?: Record<string, ConfigSourceEntry>;
-};
+declare function configure<T extends ConfigInput>(config: T, options?: ParseMyConfOptions): InferConfig<T>;
 //#endregion
 export { type ConfigFieldType, ConfigSource, ConfigSourceEntry, InferConfig, ParseMyConfOptions, type SimpleType, SourceValue, configure, customConfigElement, printConfiguredSources, toCliName, toEnvName };

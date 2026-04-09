@@ -1,6 +1,6 @@
 {
   "name": "konfuz",
-  "version": "1.0.1",
+  "version": "2.0.0",
   "description": "Configuration management library for NPM applications using Zod schemas",
   "type": "module",
   "main": "./dist/index.mjs",

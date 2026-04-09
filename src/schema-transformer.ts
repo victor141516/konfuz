@@ -48,7 +48,35 @@ export interface SchemaDescriptor {
   zodSchemas: Record<string, z.ZodType>;
 }
 
-type SupportedZodTypes = z.ZodNumber | z.ZodString | z.ZodBoolean | z.ZodEnum;
+/** The four core primitive Zod types the library can coerce from strings. */
+type ZodCoreTypes = z.ZodString | z.ZodNumber | z.ZodBoolean | z.ZodEnum;
+
+/**
+ * Modifier wrappers that may legally surround a supported core type:
+ * `.default()`, `.optional()`, `.nullable()`, `.readonly()`.
+ */
+type ZodModifier<T extends z.ZodTypeAny> =
+  | z.ZodDefault<T>
+  | z.ZodOptional<T>
+  | z.ZodNullable<T>
+  | z.ZodReadonly<T>;
+
+/**
+ * A Zod schema accepted by this library: one of the four supported primitives
+ * (`string`, `number`, `boolean`, `enum`), optionally wrapped any number of
+ * times by `.default()`, `.optional()`, `.nullable()`, or `.readonly()`.
+ *
+ * Up to four levels of wrapping are supported, which covers every realistic
+ * use-case (e.g. `z.number().default(0).nullable().optional()` is valid).
+ * Unsupported types such as `z.date()` or `z.array(z.string())` are rejected
+ * at the TypeScript level.
+ */
+export type SupportedZodTypes =
+  | ZodCoreTypes
+  | ZodModifier<ZodCoreTypes>
+  | ZodModifier<ZodModifier<ZodCoreTypes>>
+  | ZodModifier<ZodModifier<ZodModifier<ZodCoreTypes>>>
+  | ZodModifier<ZodModifier<ZodModifier<ZodModifier<ZodCoreTypes>>>>;
 
 export type SimpleType = 'string' | 'number' | 'boolean';
 
@@ -132,7 +160,7 @@ export function toCliName(key: string): string {
 // Private helpers
 // ---------------------------------------------------------------------------
 
-/** Unwraps Zod wrapper types (Optional, Default) to determine the core FieldType. */
+/** Unwraps Zod wrapper types (Default, Optional, Nullable, Readonly) to determine the core FieldType. */
 function inferFieldType(schema: z.ZodType): {
   type: FieldType;
   enumValues?: string[];
@@ -145,6 +173,10 @@ function inferFieldType(schema: z.ZodType): {
   if (schema instanceof z.ZodDefault)
     return inferFieldType(schema.def.innerType as z.ZodType);
   if (schema instanceof z.ZodOptional)
+    return inferFieldType(schema.def.innerType as z.ZodType);
+  if (schema instanceof z.ZodNullable)
+    return inferFieldType(schema.def.innerType as z.ZodType);
+  if (schema instanceof z.ZodReadonly)
     return inferFieldType(schema.def.innerType as z.ZodType);
   return { type: 'string' };
 }
