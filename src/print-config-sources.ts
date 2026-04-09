@@ -17,36 +17,6 @@ export interface ConfigSourceInfo {
   rawValue?: string;
 }
 
-function computeSourceMap(
-  info: SchemaDescriptor,
-  envFileConfig: Record<string, string>,
-  result: Record<string, unknown>,
-  cliConfig: Record<string, unknown>
-): Record<string, ConfigSourceInfo> {
-  const map: Record<string, ConfigSourceInfo> = {};
-
-  for (const field of info.fields) {
-    const name = field.name;
-    if (!(name in result)) continue;
-
-    const cliValue = cliConfig[name];
-    const envVal = process.env[field.envName];
-    const envFileRaw = envFileConfig[field.envName];
-
-    if (cliValue !== undefined) {
-      map[name] = { source: 'cli', rawValue: String(cliValue) };
-    } else if (envVal !== undefined) {
-      map[name] = { source: 'env', rawValue: envVal };
-    } else if (envFileRaw !== undefined) {
-      map[name] = { source: 'envFile', rawValue: envFileRaw };
-    } else {
-      map[name] = { source: 'default' };
-    }
-  }
-
-  return map;
-}
-
 function formatValue(value: unknown, isSecret: boolean): string {
   if (isSecret) return '***';
   return String(value ?? '');
