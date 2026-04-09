@@ -1,22 +1,20 @@
 # konfuz — Ideas & Feedback
 
-## 1. Multiple `.env` file support
+## 1. Multiple `.env` file support ✅
 
 Instead of accepting only a single file path via `envPath`, accept an array of paths.
 Files are loaded in order; each subsequent file's values override those from the previous one.
 Values not overridden are preserved. This lets users do patterns like `.env` → `.env.production` → `.env.local`.
 
-to be implemented: true
+**Implemented:** `envPath` option accepts `string | string[]`.
 
 ---
 
-## 2. Friendly, actionable validation error messages
+## 2. Friendly, actionable validation error messages ✅
 
 When Zod parsing fails, surface a human-readable message that names the broken field, shows what value was found (or that it was missing), and tells the user which env var or CLI flag to set. A raw Zod error is cryptic.
 
-Implementation note: create a test file that intentionally triggers validation errors to inspect current output, then iterate until the messages are significantly better.
-
-to be implemented: true
+**Implemented:** Error messages show the field name, expected type, received value (with type suffix for strings), and hints for env/CLI.
 
 ---
 
@@ -54,11 +52,11 @@ Reason: variable naming should remain under the user's control via `customConfig
 
 ---
 
-## 7. Secret/sensitive field masking
+## 7. Secret/sensitive field masking ✅
 
 A `secret: true` option on `customConfigElement` to redact values in error messages, help output, and any logging.
 
-to be implemented: true
+**Implemented:** `secret: true` option redacts values as `***` in error messages.
 
 ---
 
@@ -71,16 +69,26 @@ Reason: yargs already handles this automatically. It is already working.
 
 ---
 
-## 9. `printConfigSources()` — config source debug utility
+## 9. `printConfigSources()` — config source debug utility ✅
 
 A function (name TBD, `print`-style to make clear it prints and returns nothing) that prints each resolved config value alongside the source it came from: CLI argument, environment variable, `.env` file, or schema default.
 
-to be implemented: true
+**Implemented:** `printConfiguredSources(config, options?)` prints a table showing source per field.
 
 ---
 
-## 10. TypeScript-level schema validation
+## 10. TypeScript-level schema validation ✅
 
 Better compile-time errors when unsupported Zod types are passed to `configure()`, instead of failing at runtime.
 
-to be implemented: true (feasibility to be explored during implementation)
+**Implemented:** `validateSupportedSchemas()` runs at `configure()` call time and throws with clear messages for unsupported types.
+
+---
+
+## Additional: Strict Boolean Coercion
+
+Boolean fields only accept `1`, `yes`, `true` (case-insensitive) for `true`, and `0`, `no`, `false` (case-insensitive) for `false`. Any other value raises an error showing the actual type received.
+
+For number fields, `1` and `0` are valid numbers. If `true` or `yes` is passed to a number field, the error reports "received boolean" instead of "received string".
+
+For string fields, `true`, `false`, `yes`, `no`, `1`, `0` are all valid strings.

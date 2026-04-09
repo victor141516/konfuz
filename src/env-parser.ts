@@ -9,28 +9,15 @@ export interface EnvConfig {
   [key: string]: string | number | boolean | undefined;
 }
 
-export interface EnvParseResult {
-  /** Coerced values ready for final schema validation. */
-  config: EnvConfig;
-  /**
-   * The original raw string values from process.env / .env files, keyed by
-   * the camelCase field name. Useful for producing accurate error messages when
-   * coercion fails and `config[field]` is undefined despite a value being set.
-   */
-  rawValues: Record<string, string>;
-}
-
 export function parseEnvVariables(
   info: SchemaDescriptor,
   envFileConfig: EnvFileConfig
-): EnvParseResult {
+): EnvConfig {
   const config: EnvConfig = {};
-  const rawValues: Record<string, string> = {};
 
   for (const field of info.fields) {
     const envValue = process.env[field.envName];
     if (envValue !== undefined) {
-      rawValues[field.name] = envValue;
       config[field.name] = parseWithZod(envValue, field.type, field.enumValues);
     }
   }
@@ -38,26 +25,26 @@ export function parseEnvVariables(
   for (const [key, value] of Object.entries(envFileConfig)) {
     const field = info.fields.find((f) => f.envName === key);
     if (field && value !== undefined && config[field.name] === undefined) {
-      rawValues[field.name] = value;
       config[field.name] = parseWithZod(value, field.type, field.enumValues);
     }
   }
 
-  return { config, rawValues };
+  return config;
 }
 
-function getCoercionSchema(type: FieldType, enumValues?: string[]): z.ZodType {
-  switch (type) {
-    case 'number':
-      return z.coerce.number();
-    case 'boolean':
-      return z.coerce.boolean();
-    case 'enum':
-      return z.enum(enumValues as [string, ...string[]]);
-    case 'string':
-    default:
-      return z.string();
-  }
+const BOOLEAN_TRUE_VALUES = new Set(['1', 'true', 'yes']);
+const BOOLEAN_FALSE_VALUES = new Set(['0', 'false', 'no']);
+
+function coerceBoolean(value: string): boolean | undefined {
+  const lower = value.toLowerCase();
+  if (BOOLEAN_TRUE_VALUES.has(lower)) return true;
+  if (BOOLEAN_FALSE_VALUES.has(lower)) return false;
+  return undefined;
+}
+
+function isBooleanString(value: string): boolean {
+  const lower = value.toLowerCase();
+  return BOOLEAN_TRUE_VALUES.has(lower) || BOOLEAN_FALSE_VALUES.has(lower);
 }
 
 function parseWithZod(
@@ -65,10 +52,29 @@ function parseWithZod(
   type: FieldType,
   enumValues?: string[]
 ): string | number | boolean | undefined {
-  const schema = getCoercionSchema(type, enumValues);
-  const result = schema.safeParse(value);
-  if (result.success) {
-    return result.data as string | number | boolean;
+  if (type === 'boolean') {
+    return coerceBoolean(value);
   }
-  return undefined;
+
+  if (type === 'number') {
+    const numResult = z.coerce.number().safeParse(value);
+    if (numResult.success) {
+      return numResult.data as number;
+    }
+    if (isBooleanString(value)) {
+      return undefined;
+    }
+    return undefined;
+  }
+
+  if (type === 'enum') {
+    const schema = z.enum(enumValues as [string, ...string[]]);
+    const result = schema.safeParse(value);
+    if (result.success) {
+      return result.data as string;
+    }
+    return undefined;
+  }
+
+  return value;
 }

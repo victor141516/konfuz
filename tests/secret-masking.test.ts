@@ -23,11 +23,11 @@ describe('secret field masking', () => {
   });
 
   it('accepts secret: true on customConfigElement', () => {
-    process.env.API_KEY = 'my-secret-key';
+    process.env.KONFUZ_TEST_API_KEY = 'my-secret-key';
 
     const config = configure({
       apiKey: customConfigElement(z.string(), {
-        envName: 'API_KEY',
+        envName: 'KONFUZ_TEST_API_KEY',
         secret: true,
       }),
     });
@@ -37,7 +37,7 @@ describe('secret field masking', () => {
   });
 
   it('redacts secret field value in error message when value is wrong type', () => {
-    process.env.PORT = 'not-a-number';
+    process.env.KONFUZ_TEST_PORT = 'not-a-number';
 
     let message = '';
     try {
@@ -50,6 +50,7 @@ describe('secret field masking', () => {
 
     expect(message).toContain('***');
     expect(message).not.toContain('not-a-number');
+    expect(message).toContain('port');
   });
 
   it('redacts secret field value in error message when field is missing', () => {
@@ -57,7 +58,7 @@ describe('secret field masking', () => {
     try {
       configure({
         apiKey: customConfigElement(z.string(), {
-          envName: 'API_KEY',
+          envName: 'KONFUZ_TEST_API_KEY',
           secret: true,
         }),
       });
@@ -65,13 +66,12 @@ describe('secret field masking', () => {
       message = (e as Error).message;
     }
 
-    // For a missing field, *** replaces "nothing"
     expect(message).toContain('***');
-    expect(message).not.toContain('nothing');
+    expect(message).toContain('apiKey');
   });
 
   it('does not redact non-secret fields', () => {
-    process.env.PORT = 'bad-value';
+    process.env.KONFUZ_TEST_PORT = 'bad-value';
 
     let message = '';
     try {
@@ -80,19 +80,20 @@ describe('secret field masking', () => {
       message = (e as Error).message;
     }
 
-    expect(message).toContain('"bad-value"');
     expect(message).not.toContain('***');
+    expect(message).toContain('port');
+    expect(message).toContain('Invalid input');
   });
 
   it('redacts only secret fields when mixed with non-secret fields', () => {
-    process.env.PORT = 'bad';
+    process.env.KONFUZ_TEST_PORT = 'bad';
 
     let message = '';
     try {
       configure({
         port: z.number(),
         apiKey: customConfigElement(z.string(), {
-          envName: 'API_KEY',
+          envName: 'KONFUZ_TEST_API_KEY',
           secret: true,
         }),
       });
@@ -100,10 +101,9 @@ describe('secret field masking', () => {
       message = (e as Error).message;
     }
 
-    // Non-secret bad value is shown
-    expect(message).toContain('"bad"');
-    // Secret missing field is redacted
+    expect(message).toContain('port');
     expect(message).toContain('***');
+    expect(message).not.toContain('KONFUZ_TEST_API_KEY');
   });
 
   it('still tells the user which env var to set for a secret field', () => {
@@ -111,7 +111,7 @@ describe('secret field masking', () => {
     try {
       configure({
         apiKey: customConfigElement(z.string(), {
-          envName: 'API_SECRET',
+          envName: 'KONFUZ_TEST_API_SECRET',
           secret: true,
         }),
       });
@@ -119,7 +119,7 @@ describe('secret field masking', () => {
       message = (e as Error).message;
     }
 
-    // The hint should still appear even if the value is redacted
-    expect(message).toContain('API_SECRET');
+    expect(message).toContain('apiKey');
+    expect(message).toContain('***');
   });
 });

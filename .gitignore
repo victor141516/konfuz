@@ -3,3 +3,4 @@ test-env-temp
 tsconfig.tsbuildinfo
 coverage
 .kilo
+.temp

@@ -33,6 +33,7 @@
   "dependencies": {
     "change-case": "^5.4.4",
     "dotenv": "^17.0.0",
+    "table": "^6.9.0",
     "yargs": "^18.0.0"
   },
   "peerDependencies": {

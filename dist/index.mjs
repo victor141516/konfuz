@@ -1,10 +1,11 @@
+import { hideBin } from "yargs/helpers";
 import { z } from "zod";
 import { parse } from "dotenv";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 import yargs from "yargs";
-import { hideBin } from "yargs/helpers";
 import * as changeCase from "change-case";
+import table from "table";
 //#region src/schema-transformer.ts
 /**
 * Creates a configuration field with custom env var and/or CLI flag names.
@@ -18,7 +19,8 @@ function customConfigElement(type, options) {
 		envName: options?.envName,
 		cmdName: options?.cmdName,
 		cmdNameShort: options?.cmdNameShort,
-		cmdDescription: options?.cmdDescription
+		cmdDescription: options?.cmdDescription,
+		secret: options?.secret
 	};
 }
 /** Converts a camelCase key to UPPER_SNAKE_CASE (e.g. `databaseHost` → `DATABASE_HOST`). */
@@ -77,12 +79,14 @@ function extractSchemaInfo(config) {
 		let customCmdName;
 		let customCmdNameShort;
 		let customCmdDescription;
+		let secret;
 		if (isFieldConfig(value)) {
 			schema = value.type;
 			customEnvName = value.envName;
 			customCmdName = value.cmdName;
 			customCmdNameShort = value.cmdNameShort;
 			customCmdDescription = value.cmdDescription;
+			secret = value.secret;
 		} else schema = value;
 		zodSchemas[key] = schema;
 		const { type, enumValues } = inferFieldType(schema);
@@ -95,7 +99,8 @@ function extractSchemaInfo(config) {
 			type,
 			isOptional: isFieldOptional(schema),
 			defaultValue: extractDefaultValue(schema),
-			enumValues
+			enumValues,
+			secret
 		});
 	}
 	return {
@@ -126,39 +131,21 @@ function normalizeToZodObject(config) {
 }
 //#endregion
 //#region src/loader.ts
-function loadEnvFile(envPath) {
-	const path = envPath ?? resolve(process.cwd(), ".env");
+function loadSingleEnvFile(envPath) {
 	try {
-		return parse(readFileSync(path, "utf-8"));
+		return parse(readFileSync(envPath, "utf-8"));
 	} catch {
 		return {};
 	}
 }
-//#endregion
-//#region src/env-parser.ts
-function parseEnvVariables(info, envFileConfig) {
-	const config = {};
-	for (const field of info.fields) {
-		const envValue = process.env[field.envName];
-		if (envValue !== void 0) config[field.name] = parseWithZod(envValue, field.type, field.enumValues);
-	}
-	for (const [key, value] of Object.entries(envFileConfig)) {
-		const field = info.fields.find((f) => f.envName === key);
-		if (field && value !== void 0 && config[field.name] === void 0) config[field.name] = parseWithZod(value, field.type, field.enumValues);
-	}
-	return config;
-}
-function getCoercionSchema(type, enumValues) {
-	switch (type) {
-		case "number": return z.coerce.number();
-		case "boolean": return z.coerce.boolean();
-		case "enum": return z.enum(enumValues);
-		default: return z.string();
-	}
-}
-function parseWithZod(value, type, enumValues) {
-	const result = getCoercionSchema(type, enumValues).safeParse(value);
-	if (result.success) return result.data;
+function loadEnvFile(envPath) {
+	if (Array.isArray(envPath)) return envPath.reduce((acc, p) => {
+		return {
+			...acc,
+			...loadSingleEnvFile(p)
+		};
+	}, {});
+	return loadSingleEnvFile(envPath ?? resolve(process.cwd(), ".env"));
 }
 //#endregion
 //#region src/short-param.ts
@@ -210,9 +197,27 @@ var ShortParamGenerator = class {
 const globalGenerator = new ShortParamGenerator();
 //#endregion
 //#region src/cli-parser.ts
-function parseCliArguments(info) {
-	const argv = hideBin(process.argv);
+const BOOLEAN_TRUE_VALUES$1 = new Set([
+	"1",
+	"true",
+	"yes"
+]);
+const BOOLEAN_FALSE_VALUES$1 = new Set([
+	"0",
+	"false",
+	"no"
+]);
+function coerceBooleanValue(value) {
+	if (typeof value === "boolean") return false;
+	if (value === "") return true;
+	const lower = value.toLowerCase();
+	if (BOOLEAN_TRUE_VALUES$1.has(lower)) return true;
+	if (BOOLEAN_FALSE_VALUES$1.has(lower)) return false;
+}
+function parseCliArguments(info, options) {
+	const argv = options?.argv ?? hideBin(process.argv);
 	const config = {};
+	const rawValues = {};
 	globalGenerator.reset();
 	if (argv.length === 0) {
 		for (const field of info.fields) if (field.defaultValue !== void 0) config[field.name] = field.defaultValue;
@@ -224,63 +229,284 @@ function parseCliArguments(info) {
 		const shortParam = field.cmdNameShort ? field.cmdNameShort : globalGenerator.getShortParam(field.name);
 		if (field.type === "number") y = y.number(cliName);
 		else y = y.string(cliName);
-		const options = {};
-		if (field.enumValues) options.choices = field.enumValues;
-		if (field.cmdDescription) options.describe = field.cmdDescription;
+		const opts = {};
+		if (field.enumValues) opts.choices = field.enumValues;
+		if (field.cmdDescription) opts.describe = field.cmdDescription;
 		y = y.option(cliName, {
 			alias: shortParam,
-			...options
+			...opts
 		});
 	}
 	const parsed = y.argv;
 	for (const field of info.fields) {
 		const value = parsed[field.cmdName];
-		if (value !== void 0) if (field.type === "boolean") config[field.name] = coerceBooleanField(value);
-		else config[field.name] = value;
+		if (value !== void 0) if (field.type === "boolean") {
+			const coerced = coerceBooleanValue(value);
+			if (coerced !== void 0) config[field.name] = coerced;
+			else rawValues[field.name] = value;
+		} else config[field.name] = value;
 		else if (field.defaultValue !== void 0) config[field.name] = field.defaultValue;
+	}
+	if (Object.keys(rawValues).length > 0) return {
+		config,
+		rawValues
+	};
+	return config;
+}
+//#endregion
+//#region src/validate-schemas.ts
+const UNSUPPORTED_TYPE_NAMES = new Set([
+	"ZodObject",
+	"ZodArray",
+	"ZodUnion",
+	"ZodRecord",
+	"ZodTuple",
+	"ZodIntersection",
+	"ZodDiscriminatedUnion",
+	"ZodTransform",
+	"ZodFunction",
+	"ZodPromise",
+	"ZodMap",
+	"ZodSet"
+]);
+function isSupportedSchemaType(schema) {
+	const name = schema.constructor.name;
+	if (UNSUPPORTED_TYPE_NAMES.has(name)) return false;
+	if (schema instanceof z.ZodString || schema instanceof z.ZodNumber || schema instanceof z.ZodBoolean || schema instanceof z.ZodEnum || schema instanceof z.ZodLazy) return true;
+	const def = schema._def;
+	if (def?.innerType) return isSupportedSchemaType(def.innerType);
+	if (def?.getter) try {
+		return isSupportedSchemaType(def.getter());
+	} catch {
+		return false;
+	}
+	return false;
+}
+function schemaFriendlyName(schema) {
+	return schema.constructor.name.replace("Zod", "");
+}
+function isZodSchema(value) {
+	if (value === null || typeof value !== "object") return false;
+	const name = value.constructor?.name;
+	return name ? name.startsWith("Zod") : false;
+}
+function validateSupportedSchemas(config) {
+	for (const [key, value] of Object.entries(config)) {
+		const schema = typeof value === "object" && value !== null && "type" in value && value.type instanceof z.ZodType ? value.type : value;
+		if (!isZodSchema(schema)) throw new Error(`[konfuz] Unexpected config key "${key}": expected a Zod schema or customConfigElement(), got ${typeof schema}. Use z.string(), z.number(), z.boolean(), or z.enum() for config fields.`);
+		const zodSchema = schema;
+		const name = zodSchema.constructor.name;
+		if (UNSUPPORTED_TYPE_NAMES.has(name)) {
+			const friendlyName = schemaFriendlyName(zodSchema);
+			const hint = name === "ZodObject" ? `Use z.string() or z.number() for field "${key}".` : name === "ZodArray" ? `Use z.string() for a single string field, or split into separate fields.` : name === "ZodUnion" ? `Ensure all union members are supported types (string, number, boolean, enum).` : `Use z.string(), z.number(), z.boolean(), or z.enum() for field "${key}".`;
+			throw new Error(`[konfuz] Unsupported schema type: ${friendlyName}. Only primitive types (string, number, boolean, enum) and their optional/default wrappers are supported. ${hint}`);
+		}
+		if (!isSupportedSchemaType(zodSchema)) {
+			const friendlyName = schemaFriendlyName(zodSchema);
+			throw new Error(`[konfuz] Unsupported schema type: ${friendlyName}. Use z.string(), z.number(), z.boolean(), or z.enum() for field "${key}".`);
+		}
+	}
+}
+//#endregion
+//#region src/env-parser.ts
+function parseEnvVariables(info, envFileConfig) {
+	const config = {};
+	for (const field of info.fields) {
+		const envValue = process.env[field.envName];
+		if (envValue !== void 0) config[field.name] = parseWithZod(envValue, field.type, field.enumValues);
+	}
+	for (const [key, value] of Object.entries(envFileConfig)) {
+		const field = info.fields.find((f) => f.envName === key);
+		if (field && value !== void 0 && config[field.name] === void 0) config[field.name] = parseWithZod(value, field.type, field.enumValues);
 	}
 	return config;
 }
-/**
-* Determines the boolean value for a CLI flag by inspecting the raw argv.
-*
-* Yargs' `.boolean()` coercion is inconsistent:
-*   --flag        → yargs omits it from output (undefined)  → treat as true
-*   --flag 1      → yargs returns "1" (string)             → treat as true
-*   --flag 0      → yargs returns "0" (string)             → treat as false
-*   --flag=true   → yargs returns "true" (string)         → treat as true
-*   --flag=false  → yargs returns "false" (string)         → treat as false
-*   --flag=1      → yargs returns "1" (string)             → treat as true
-*   --flag=0      → yargs returns "0" (string)             → treat as false
-*   --flag=yes    → yargs returns "yes" (string)           → treat as true
-*   --flag=no     → yargs returns "no" (string)            → treat as false
-*   --no-flag     → yargs returns false (boolean)          → treat as false
-*/
-function coerceBooleanField(yargsValue) {
-	if (typeof yargsValue === "boolean") return false;
-	if (yargsValue === "") return true;
-	const lower = yargsValue.toLowerCase();
-	return lower === "true" || lower === "1" || lower === "yes";
+const BOOLEAN_TRUE_VALUES = new Set([
+	"1",
+	"true",
+	"yes"
+]);
+const BOOLEAN_FALSE_VALUES = new Set([
+	"0",
+	"false",
+	"no"
+]);
+function coerceBoolean(value) {
+	const lower = value.toLowerCase();
+	if (BOOLEAN_TRUE_VALUES.has(lower)) return true;
+	if (BOOLEAN_FALSE_VALUES.has(lower)) return false;
+}
+function isBooleanString(value) {
+	const lower = value.toLowerCase();
+	return BOOLEAN_TRUE_VALUES.has(lower) || BOOLEAN_FALSE_VALUES.has(lower);
+}
+function parseWithZod(value, type, enumValues) {
+	if (type === "boolean") return coerceBoolean(value);
+	if (type === "number") {
+		const numResult = z.coerce.number().safeParse(value);
+		if (numResult.success) return numResult.data;
+		if (isBooleanString(value)) return;
+		return;
+	}
+	if (type === "enum") {
+		const result = z.enum(enumValues).safeParse(value);
+		if (result.success) return result.data;
+		return;
+	}
+	return value;
+}
+//#endregion
+//#region src/print-config-sources.ts
+const STYLES = {
+	bold: (text) => `\x1b[1m${text}\x1b[0m`,
+	dim: (text) => `\x1b[2m${text}\x1b[0m`,
+	green: (text) => `\x1b[32m${text}\x1b[0m`,
+	yellow: (text) => `\x1b[33m${text}\x1b[0m`,
+	blue: (text) => `\x1b[34m${text}\x1b[0m`,
+	gray: (text) => `\x1b[90m${text}\x1b[0m`
+};
+function formatSourceValue(sv) {
+	if (!sv) return "-";
+	return `${sv.name}=${sv.value}`;
+}
+function getCellStyle(sv, isActive) {
+	if (!sv) return STYLES.gray("-");
+	const text = formatSourceValue(sv);
+	return isActive ? STYLES.bold(text) : STYLES.dim(text);
+}
+function getFinalValueStyle(value, source) {
+	if (value === void 0) return STYLES.gray("-");
+	switch (source) {
+		case "cli": return STYLES.green(value);
+		case "env": return STYLES.yellow(value);
+		case "envFile": return STYLES.blue(value);
+		default: return STYLES.dim(value);
+	}
+}
+function printConfiguredSources(configResult) {
+	const sources = configResult.__$sources__;
+	if (!sources) throw new Error("This is not a Konfuz configuration");
+	const fieldNames = Object.keys(configResult).filter((k) => !k.startsWith("__"));
+	const tableData = [[
+		STYLES.bold("Field"),
+		STYLES.bold(".env file"),
+		STYLES.bold("Environment"),
+		STYLES.bold("CLI"),
+		STYLES.bold("Final value")
+	]];
+	for (const name of fieldNames) {
+		const entry = sources[name];
+		if (!entry) {
+			tableData.push([
+				name,
+				"-",
+				"-",
+				"-",
+				"-"
+			]);
+			continue;
+		}
+		tableData.push([
+			name,
+			getCellStyle(entry.envFile, entry.finalSource === "envFile"),
+			getCellStyle(entry.env, entry.finalSource === "env"),
+			getCellStyle(entry.cli, entry.finalSource === "cli"),
+			getFinalValueStyle(entry.finalValue, entry.finalSource)
+		]);
+	}
+	console.log("[konfuz] Configuration sources (priority: CLI > Environment > .env file > default)\n");
+	console.log(table.table(tableData, { columns: {
+		0: {
+			width: 20,
+			truncate: 20
+		},
+		1: {
+			width: 30,
+			truncate: 30
+		},
+		2: {
+			width: 30,
+			truncate: 30
+		},
+		3: {
+			width: 30,
+			truncate: 30
+		},
+		4: {
+			width: 20,
+			truncate: 20
+		}
+	} }));
 }
 //#endregion
 //#region src/index.ts
 function configure(config, options) {
+	validateSupportedSchemas(config);
 	const info = extractSchemaInfo(config);
 	const schema = normalizeToZodObject(config);
 	const defaults = extractDefaults(schema.shape);
-	const envConfig = parseEnvVariables(info, options?.envPath ? loadEnvFile(options.envPath) : loadEnvFile());
-	const cliConfig = parseCliArguments(info);
+	const envFileConfig = options?.envPath ? loadEnvFile(options.envPath) : loadEnvFile();
+	const envConfig = parseEnvVariables(info, envFileConfig);
+	const cliResult = parseCliArguments(info, { argv: options?.argv });
+	const cliConfig = cliResult.config ?? cliResult;
+	const cliArgsProvided = (options?.argv ?? hideBin(process.argv)).length > 0;
+	const sources = {};
 	const merged = {
 		...defaults,
 		...envConfig,
 		...cliConfig
 	};
+	for (const field of info.fields) {
+		const name = field.name;
+		const cliValue = cliConfig[name];
+		const envValue = process.env[field.envName];
+		const envFileValue = envFileConfig[field.envName];
+		const cliWasProvided = cliArgsProvided && cliValue !== void 0;
+		const entry = {
+			finalSource: "default",
+			envFile: envFileValue !== void 0 ? {
+				name: field.envName,
+				value: envFileValue
+			} : void 0,
+			env: envValue !== void 0 ? {
+				name: field.envName,
+				value: envValue
+			} : void 0,
+			cli: cliWasProvided ? {
+				name: `--${field.cmdName}`,
+				value: String(cliValue)
+			} : void 0
+		};
+		if (cliWasProvided) {
+			entry.finalSource = "cli";
+			entry.finalValue = String(cliValue);
+		} else if (envValue !== void 0) {
+			entry.finalSource = "env";
+			entry.finalValue = envValue;
+		} else if (envFileValue !== void 0) {
+			entry.finalSource = "envFile";
+			entry.finalValue = envFileValue;
+		} else if (name in merged) entry.finalValue = String(merged[name]);
+		sources[name] = entry;
+	}
 	const result = schema.safeParse(merged);
 	if (!result.success) {
-		const errors = result.error.issues.map((e) => `${e.path.join(".")}: ${e.message}`).join(", ");
+		result.error.__$sources__ = sources;
+		const errors = result.error.issues.map((issue) => {
+			const fieldName = String(issue.path[0]);
+			if (info.fields.find((f) => f.name === fieldName)?.secret) return `${fieldName}: ***`;
+			return `${fieldName}: ${issue.message}`;
+		}).join(", ");
 		throw new Error(`Configuration validation failed: ${errors}`);
 	}
-	return result.data;
+	const data = result.data;
+	Object.defineProperty(data, "__$sources__", {
+		value: sources,
+		enumerable: false,
+		writable: true,
+		configurable: true
+	});
+	return data;
 }
 //#endregion
-export { configure, customConfigElement, toCliName, toEnvName };
+export { configure, customConfigElement, printConfiguredSources, toCliName, toEnvName };

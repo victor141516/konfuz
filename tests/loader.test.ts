@@ -4,7 +4,7 @@ import { writeFileSync, unlinkSync, mkdirSync, rmSync, existsSync } from 'fs';
 import { join } from 'path';
 
 describe('loader', () => {
-  const testDir = join(process.cwd(), 'test-env-temp');
+  const testDir = join(process.cwd(), '.temp');
 
   beforeEach(() => {
     if (!existsSync(testDir)) {
@@ -25,13 +25,16 @@ describe('loader', () => {
 
   it('loads .env file from current directory', () => {
     const envPath = join(testDir, '.env');
-    writeFileSync(envPath, 'PORT=3000\nHOST=localhost\n');
+    writeFileSync(
+      envPath,
+      'KONFUZ_TEST_PORT=3000\nKONFUZ_TEST_HOST=localhost\n'
+    );
 
     const config = loadEnvFile(envPath);
 
     expect(config).toEqual({
-      PORT: '3000',
-      HOST: 'localhost',
+      KONFUZ_TEST_PORT: '3000',
+      KONFUZ_TEST_HOST: 'localhost',
     });
   });
 
@@ -44,26 +47,26 @@ describe('loader', () => {
     const envPath = join(testDir, '.env');
     writeFileSync(
       envPath,
-      '# This is a comment\nPORT=3000\n# Another comment\nHOST=localhost\n'
+      '# This is a comment\nKONFUZ_TEST_PORT=3000\n# Another comment\nKONFUZ_TEST_HOST=localhost\n'
     );
 
     const config = loadEnvFile(envPath);
 
     expect(config).toEqual({
-      PORT: '3000',
-      HOST: 'localhost',
+      KONFUZ_TEST_PORT: '3000',
+      KONFUZ_TEST_HOST: 'localhost',
     });
   });
 
   it('handles empty values', () => {
     const envPath = join(testDir, '.env');
-    writeFileSync(envPath, 'EMPTY_VAR=\nPORT=3000\n');
+    writeFileSync(envPath, 'KONFUZ_TEST_EMPTY_VAR=\nKONFUZ_TEST_PORT=3000\n');
 
     const config = loadEnvFile(envPath);
 
     expect(config).toEqual({
-      EMPTY_VAR: '',
-      PORT: '3000',
+      KONFUZ_TEST_EMPTY_VAR: '',
+      KONFUZ_TEST_PORT: '3000',
     });
   });
 
@@ -71,14 +74,17 @@ describe('loader', () => {
     it('merges values from multiple files', () => {
       const base = join(testDir, '.env');
       const override = join(testDir, '.env.production');
-      writeFileSync(base, 'PORT=3000\nHOST=localhost\n');
-      writeFileSync(override, 'HOST=prod.example.com\n');
+      writeFileSync(
+        base,
+        'KONFUZ_TEST_PORT=3000\nKONFUZ_TEST_HOST=localhost\n'
+      );
+      writeFileSync(override, 'KONFUZ_TEST_HOST=prod.example.com\n');
 
       const config = loadEnvFile([base, override]);
 
       expect(config).toEqual({
-        PORT: '3000',
-        HOST: 'prod.example.com',
+        KONFUZ_TEST_PORT: '3000',
+        KONFUZ_TEST_HOST: 'prod.example.com',
       });
     });
 
@@ -98,25 +104,28 @@ describe('loader', () => {
     it('preserves values from earlier files that are not overridden', () => {
       const base = join(testDir, '.env');
       const local = join(testDir, '.env.local');
-      writeFileSync(base, 'PORT=3000\nHOST=localhost\nDEBUG=false\n');
-      writeFileSync(local, 'DEBUG=true\n');
+      writeFileSync(
+        base,
+        'KONFUZ_TEST_PORT=3000\nKONFUZ_TEST_HOST=localhost\nKONFUZ_TEST_DEBUG=false\n'
+      );
+      writeFileSync(local, 'KONFUZ_TEST_DEBUG=true\n');
 
       const config = loadEnvFile([base, local]);
 
       expect(config).toEqual({
-        PORT: '3000',
-        HOST: 'localhost',
-        DEBUG: 'true',
+        KONFUZ_TEST_PORT: '3000',
+        KONFUZ_TEST_HOST: 'localhost',
+        KONFUZ_TEST_DEBUG: 'true',
       });
     });
 
     it('silently skips files that do not exist', () => {
       const base = join(testDir, '.env');
-      writeFileSync(base, 'PORT=3000\n');
+      writeFileSync(base, 'KONFUZ_TEST_PORT=3000\n');
 
       const config = loadEnvFile([base, '/nonexistent/.env.local']);
 
-      expect(config).toEqual({ PORT: '3000' });
+      expect(config).toEqual({ KONFUZ_TEST_PORT: '3000' });
     });
 
     it('returns empty object when all files in the array are missing', () => {

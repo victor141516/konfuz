@@ -17,6 +17,11 @@ interface FieldConfig<T extends z.ZodTypeAny = z.ZodTypeAny> {
   cmdNameShort?: string;
   /** Description shown next to this flag in `--help` output. */
   cmdDescription?: string;
+  /**
+   * Mark this field as sensitive. When `true`, its value is redacted
+   * (shown as `***`) in error messages and log output.
+   */
+  secret?: boolean;
 }
 /**
  * The shape of the plain object a user passes to `configure()`.
@@ -35,18 +40,45 @@ declare function customConfigElement<T extends z.ZodTypeAny>(type: T, options?: 
   cmdName?: string;
   cmdNameShort?: string;
   cmdDescription?: string;
+  secret?: boolean;
 }): FieldConfig<T>;
 /** Converts a camelCase key to UPPER_SNAKE_CASE (e.g. `databaseHost` → `DATABASE_HOST`). */
 declare function toEnvName(key: string): string;
 /** Converts a camelCase key to kebab-case (e.g. `databaseHost` → `database-host`). */
 declare function toCliName(key: string): string;
 //#endregion
+//#region src/print-config-sources.d.ts
+interface ConfigResult {
+  __$sources__?: Record<string, ConfigSourceEntry>;
+  [key: string]: unknown;
+}
+declare function printConfiguredSources(configResult: ConfigResult): void;
+//#endregion
 //#region src/index.d.ts
 interface ParseMyConfOptions {
-  envPath?: string;
+  envPath?: string | string[];
   argv?: string[];
 }
 type InferConfig<T extends ConfigInput> = { [K in keyof T]: T[K] extends z.ZodTypeAny ? z.infer<T[K]> : T[K] extends FieldConfig ? z.infer<T[K]['type']> : never };
-declare function configure<T extends ConfigInput>(config: T, options?: ParseMyConfOptions): InferConfig<T>;
+type ConfigSource = 'cli' | 'env' | 'envFile' | 'default';
+interface SourceValue {
+  name: string;
+  value: string;
+}
+interface ConfigSourceEntry {
+  finalSource: ConfigSource;
+  finalValue?: string;
+  envFile?: SourceValue;
+  env?: SourceValue;
+  cli?: SourceValue;
+}
+declare module 'zod' {
+  interface ZodError {
+    __$sources__?: Record<string, ConfigSourceEntry>;
+  }
+}
+declare function configure<T extends ConfigInput>(config: T, options?: ParseMyConfOptions): InferConfig<T> & {
+  __$sources__?: Record<string, ConfigSourceEntry>;
+};
 //#endregion
-export { ParseMyConfOptions, configure, customConfigElement, toCliName, toEnvName };
+export { ConfigSource, ConfigSourceEntry, ParseMyConfOptions, SourceValue, configure, customConfigElement, printConfiguredSources, toCliName, toEnvName };

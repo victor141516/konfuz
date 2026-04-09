@@ -7,12 +7,34 @@ export interface CliConfig {
   [key: string]: string | number | boolean | undefined;
 }
 
+export interface CliParseResult {
+  config: CliConfig;
+  rawValues: Record<string, string>;
+}
+
+const BOOLEAN_TRUE_VALUES = new Set(['1', 'true', 'yes']);
+const BOOLEAN_FALSE_VALUES = new Set(['0', 'false', 'no']);
+
+function coerceBooleanValue(value: string | boolean): boolean | undefined {
+  if (typeof value === 'boolean') {
+    return false;
+  }
+  if (value === '') {
+    return true;
+  }
+  const lower = value.toLowerCase();
+  if (BOOLEAN_TRUE_VALUES.has(lower)) return true;
+  if (BOOLEAN_FALSE_VALUES.has(lower)) return false;
+  return undefined;
+}
+
 export function parseCliArguments(
   info: SchemaDescriptor,
   options?: { argv?: string[] }
-): CliConfig {
+): CliConfig | CliParseResult {
   const argv = options?.argv ?? hideBin(process.argv);
   const config: CliConfig = {};
+  const rawValues: Record<string, string> = {};
 
   globalGenerator.reset();
 
@@ -36,23 +58,21 @@ export function parseCliArguments(
     if (field.type === 'number') {
       y = y.number(cliName);
     } else {
-      // For booleans and strings, use string type and handle coercion ourselves.
-      // Yargs' built-in boolean coercion does not handle --flag=1 / --flag 0 correctly.
       y = y.string(cliName);
     }
 
-    const options: Record<string, unknown> = {};
+    const opts: Record<string, unknown> = {};
     if (field.enumValues) {
-      options.choices = field.enumValues;
+      opts.choices = field.enumValues;
     }
     if (field.cmdDescription) {
-      options.describe = field.cmdDescription;
+      opts.describe = field.cmdDescription;
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     y = (y as any).option(cliName, {
       alias: shortParam,
-      ...options,
+      ...opts,
     });
   }
 
@@ -64,9 +84,12 @@ export function parseCliArguments(
     const value = (parsed as any)[cliName];
     if (value !== undefined) {
       if (field.type === 'boolean') {
-        // Determine the actual boolean value from the raw argv rather than
-        // relying on yargs, which does not interpret "1" / "0" / "yes" correctly.
-        config[field.name] = coerceBooleanField(value);
+        const coerced = coerceBooleanValue(value);
+        if (coerced !== undefined) {
+          config[field.name] = coerced;
+        } else {
+          rawValues[field.name] = value;
+        }
       } else {
         config[field.name] = value as string | number | boolean;
       }
@@ -75,37 +98,8 @@ export function parseCliArguments(
     }
   }
 
+  if (Object.keys(rawValues).length > 0) {
+    return { config, rawValues };
+  }
   return config;
-}
-
-/**
- * Determines the boolean value for a CLI flag by inspecting the raw argv.
- *
- * Yargs' `.boolean()` coercion is inconsistent:
- *   --flag        → yargs omits it from output (undefined)  → treat as true
- *   --flag 1      → yargs returns "1" (string)             → treat as true
- *   --flag 0      → yargs returns "0" (string)             → treat as false
- *   --flag=true   → yargs returns "true" (string)         → treat as true
- *   --flag=false  → yargs returns "false" (string)         → treat as false
- *   --flag=1      → yargs returns "1" (string)             → treat as true
- *   --flag=0      → yargs returns "0" (string)             → treat as false
- *   --flag=yes    → yargs returns "yes" (string)           → treat as true
- *   --flag=no     → yargs returns "no" (string)            → treat as false
- *   --no-flag     → yargs returns false (boolean)          → treat as false
- */
-function coerceBooleanField(yargsValue: string | boolean): boolean {
-  // --no-<flag> style negation results in a boolean false directly
-  if (typeof yargsValue === 'boolean') {
-    return false;
-  }
-
-  // Bare flag with no value (--enabled) returns '' from yargs string mode
-  if (yargsValue === '') {
-    return true;
-  }
-
-  // Flag was provided with an explicit value (--flag value or --flag=value)
-  // yargs returns the value as a string — apply our truthy/falsy rules.
-  const lower = yargsValue.toLowerCase();
-  return lower === 'true' || lower === '1' || lower === 'yes';
 }
