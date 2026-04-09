@@ -71,6 +71,65 @@ describe('configure', () => {
     expect(config.host).toBe('example.com');
   });
 
+  describe('multiple envPath files', () => {
+    it('merges values from multiple env files', () => {
+      const base = join(testDir, '.env');
+      const prod = join(testDir, '.env.production');
+      writeFileSync(base, 'PORT=3000\nHOST=localhost\n');
+      writeFileSync(prod, 'HOST=prod.example.com\n');
+
+      const config = configure(
+        { port: z.number(), host: z.string() },
+        { envPath: [base, prod] }
+      );
+
+      expect(config.port).toBe(3000);
+      expect(config.host).toBe('prod.example.com');
+    });
+
+    it('later files override values from earlier files', () => {
+      const base = join(testDir, '.env');
+      const local = join(testDir, '.env.local');
+      writeFileSync(base, 'PORT=3000\nHOST=base-host\n');
+      writeFileSync(local, 'PORT=4000\n');
+
+      const config = configure(
+        { port: z.number(), host: z.string() },
+        { envPath: [base, local] }
+      );
+
+      expect(config.port).toBe(4000);
+      expect(config.host).toBe('base-host');
+    });
+
+    it('env vars still override values from all env files', () => {
+      const base = join(testDir, '.env');
+      const local = join(testDir, '.env.local');
+      writeFileSync(base, 'PORT=3000\n');
+      writeFileSync(local, 'PORT=4000\n');
+      process.env.PORT = '9000';
+
+      const config = configure(
+        { port: z.number() },
+        { envPath: [base, local] }
+      );
+
+      expect(config.port).toBe(9000);
+    });
+
+    it('silently ignores missing files in the array', () => {
+      const base = join(testDir, '.env');
+      writeFileSync(base, 'PORT=3000\n');
+
+      const config = configure(
+        { port: z.number() },
+        { envPath: [base, join(testDir, '.env.nonexistent')] }
+      );
+
+      expect(config.port).toBe(3000);
+    });
+  });
+
   it('environment variables override .env file', () => {
     writeFileSync(envPath, 'PORT=8080\n');
     process.env.PORT = '9000';
