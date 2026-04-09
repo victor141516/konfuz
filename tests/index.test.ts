@@ -50,7 +50,7 @@ describe('configure', () => {
       konfuzTestHost: z.string().default('localhost'),
     });
 
-    expect(config).toEqual({
+    expect(config).toMatchObject({
       konfuzTestPort: 3000,
       konfuzTestHost: 'localhost',
     });

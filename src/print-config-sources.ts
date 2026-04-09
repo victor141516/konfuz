@@ -3,9 +3,8 @@ import type { ConfigSourceEntry, SourceValue } from './index';
 
 export type ConfigSource = 'cli' | 'env' | 'envFile' | 'default';
 
-interface ConfigResult {
+export interface InternalSources {
   __$sources__?: Record<string, ConfigSourceEntry>;
-  [key: string]: unknown;
 }
 
 const STYLES = {
@@ -57,9 +56,21 @@ function getFinalValueStyle(
   }
 }
 
-export function printConfiguredSources(configResult: ConfigResult): void {
-  const sources = configResult.__$sources__;
-  if (!sources) throw new Error('This is not a Konfuz configuration');
+export function printConfiguredSources(configResult: unknown): void {
+  if (typeof configResult !== 'object' || configResult === null) {
+    throw new Error('This is not a Konfuz configuration');
+  }
+
+  if (!('__$sources__' in configResult)) {
+    throw new Error('This is not a Konfuz configuration');
+  }
+
+  if (!configResult.__$sources__) {
+    throw new Error('This is not a Konfuz configuration');
+  }
+  const sources = configResult.__$sources__ as NonNullable<
+    InternalSources['__$sources__']
+  >;
 
   const fieldNames = Object.keys(configResult).filter(
     (k) => !k.startsWith('__')
@@ -76,7 +87,7 @@ export function printConfiguredSources(configResult: ConfigResult): void {
   ];
 
   for (const name of fieldNames) {
-    const entry: ConfigSourceEntry = sources[name];
+    const entry = sources[name] as ConfigSourceEntry;
     if (!entry) {
       tableData.push([name, '-', '-', '-', '-']);
       continue;

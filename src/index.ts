@@ -17,6 +17,7 @@ import {
   type CliParseResult,
 } from './cli-parser';
 import { parseEnvVariables, type EnvConfig } from './env-parser';
+import { InternalSources } from './print-config-sources';
 
 export interface ParseMyConfOptions {
   envPath?: string | string[];
@@ -64,16 +65,10 @@ export interface ConfigSourceEntry {
   secret?: boolean;
 }
 
-declare module 'zod' {
-  interface ZodError {
-    __$sources__?: Record<string, ConfigSourceEntry>;
-  }
-}
-
 export function configure<T extends ConfigInput>(
   config: T,
   options?: ParseMyConfOptions
-): InferConfig<T> & { __$sources__?: Record<string, ConfigSourceEntry> } {
+): InferConfig<T> {
   const info = extractSchemaInfo(config as ConfigInput);
 
   const schema: z.ZodObject<Record<string, z.ZodTypeAny>> =
@@ -147,7 +142,6 @@ export function configure<T extends ConfigInput>(
   const result = schema.safeParse(merged);
 
   if (!result.success) {
-    result.error.__$sources__ = sources;
     const issues = result.error.issues.map((issue) => {
       const fieldName = String(issue.path[0]);
       const field = info.fields.find((f) => f.name === fieldName);
@@ -160,14 +154,10 @@ export function configure<T extends ConfigInput>(
     throw new Error(`Configuration validation failed: ${errors}`);
   }
 
-  const data = result.data as InferConfig<T>;
-  Object.defineProperty(data, '__$sources__', {
-    value: sources,
-    enumerable: false,
-    writable: true,
-    configurable: true,
-  });
-  return data as InferConfig<T>;
+  const data = result.data as InferConfig<T> & InternalSources;
+  data.__$sources__ = sources;
+
+  return data;
 }
 
 export { toEnvName, toCliName } from './schema-transformer';
