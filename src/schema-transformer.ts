@@ -50,13 +50,17 @@ export interface SchemaDescriptor {
 
 type SupportedZodTypes = z.ZodNumber | z.ZodString | z.ZodBoolean | z.ZodEnum;
 
+export type SimpleType = 'string' | 'number' | 'boolean';
+
+export type ConfigFieldType = SupportedZodTypes | SimpleType;
+
 /**
  * Optional user-supplied customisation for a single configuration field.
  * Create one with the `customConfigElement()` helper and use it in place of a
  * bare Zod schema when calling `configure()`.
  */
-export interface FieldConfig<T extends SupportedZodTypes = SupportedZodTypes> {
-  /** The Zod schema that validates this field's value. */
+export interface FieldConfig<T extends ConfigFieldType = ConfigFieldType> {
+  /** The Zod schema or simple type that validates this field's value. */
   type: T;
   /** Override the default UPPER_SNAKE_CASE environment variable name. */
   envName?: string;
@@ -75,10 +79,10 @@ export interface FieldConfig<T extends SupportedZodTypes = SupportedZodTypes> {
 
 /**
  * The shape of the plain object a user passes to `configure()`.
- * Each value is either a bare Zod schema or a `FieldConfig` created with
+ * Each value is either a bare Zod schema, a simple type string, or a `FieldConfig` created with
  * `customConfigElement()`.
  */
-export type ConfigInput = Record<string, SupportedZodTypes | FieldConfig>;
+export type ConfigInput = Record<string, ConfigFieldType | FieldConfig>;
 
 // ---------------------------------------------------------------------------
 // Public helpers
@@ -166,15 +170,32 @@ function isFieldOptional(schema: z.ZodType): boolean {
   return false;
 }
 
-/** Type guard: returns `true` when a config entry is a `FieldConfig` rather than a bare Zod schema. */
+function simpleTypeToZod(type: SimpleType): SupportedZodTypes {
+  switch (type) {
+    case 'string':
+      return z.string();
+    case 'number':
+      return z.number();
+    case 'boolean':
+      return z.boolean();
+  }
+}
+
+function isSimpleType(value: unknown): value is SimpleType {
+  return (
+    typeof value === 'string' && ['string', 'number', 'boolean'].includes(value)
+  );
+}
+
+/** Type guard: returns `true` when a config entry is a `FieldConfig` rather than a bare Zod schema or simple type. */
 function isFieldConfig(
-  value: SupportedZodTypes | FieldConfig
+  value: ConfigFieldType | FieldConfig
 ): value is FieldConfig {
   return (
     typeof value === 'object' &&
     value !== null &&
     'type' in value &&
-    value.type instanceof z.ZodType
+    (value.type instanceof z.ZodType || isSimpleType(value.type))
   );
 }
 
@@ -190,7 +211,10 @@ export function extractSchemaInfo(config: ConfigInput): SchemaDescriptor {
   const fields: FieldDescriptor[] = [];
   const zodSchemas: Record<string, z.ZodType> = {};
 
-  const entries = Object.entries(config) as [string, FieldConfig][];
+  const entries = Object.entries(config) as [
+    string,
+    FieldConfig | ConfigFieldType,
+  ][];
 
   for (const [key, value] of entries) {
     let schema: z.ZodType;
@@ -202,12 +226,16 @@ export function extractSchemaInfo(config: ConfigInput): SchemaDescriptor {
     let secret: boolean | undefined;
 
     if (isFieldConfig(value)) {
-      schema = value.type;
+      schema = isSimpleType(value.type)
+        ? simpleTypeToZod(value.type)
+        : value.type;
       customEnvName = value.envName;
       customCmdName = value.cmdName;
       customCmdNameShort = value.cmdNameShort;
       customCmdDescription = value.cmdDescription;
       secret = value.secret;
+    } else if (isSimpleType(value)) {
+      schema = simpleTypeToZod(value);
     } else {
       schema = value;
     }
@@ -262,7 +290,15 @@ export function normalizeToZodObject<T extends ConfigInput>(
   const shape: Record<string, SupportedZodTypes> = {};
 
   for (const [key, value] of Object.entries(config)) {
-    shape[key] = isFieldConfig(value) ? value.type : value;
+    if (isFieldConfig(value)) {
+      shape[key] = isSimpleType(value.type)
+        ? simpleTypeToZod(value.type)
+        : value.type;
+    } else if (isSimpleType(value)) {
+      shape[key] = simpleTypeToZod(value);
+    } else {
+      shape[key] = value;
+    }
   }
 
   return z.object(shape);

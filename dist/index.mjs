@@ -13,9 +13,9 @@ import table from "table";
 * @example
 * customConfigElement(z.number(), { envName: 'SERVER_PORT', cmdShort: 'p' })
 */
-function customConfigElement(type, options) {
+function customConfigElement(options) {
 	return {
-		type,
+		type: options.type,
 		envName: options?.envName,
 		cmdName: options?.cmdName,
 		cmdNameShort: options?.cmdNameShort,
@@ -61,9 +61,23 @@ function isFieldOptional(schema) {
 	if (schema instanceof z.ZodReadonly) return isFieldOptional(schema.def.innerType);
 	return false;
 }
-/** Type guard: returns `true` when a config entry is a `FieldConfig` rather than a bare Zod schema. */
+function simpleTypeToZod(type) {
+	switch (type) {
+		case "string": return z.string();
+		case "number": return z.number();
+		case "boolean": return z.boolean();
+	}
+}
+function isSimpleType(value) {
+	return typeof value === "string" && [
+		"string",
+		"number",
+		"boolean"
+	].includes(value);
+}
+/** Type guard: returns `true` when a config entry is a `FieldConfig` rather than a bare Zod schema or simple type. */
 function isFieldConfig(value) {
-	return typeof value === "object" && value !== null && "type" in value && value.type instanceof z.ZodType;
+	return typeof value === "object" && value !== null && "type" in value && (value.type instanceof z.ZodType || isSimpleType(value.type));
 }
 /**
 * Analyses a user-provided config object (or `z.ZodObject`) and returns a
@@ -81,13 +95,14 @@ function extractSchemaInfo(config) {
 		let customCmdDescription;
 		let secret;
 		if (isFieldConfig(value)) {
-			schema = value.type;
+			schema = isSimpleType(value.type) ? simpleTypeToZod(value.type) : value.type;
 			customEnvName = value.envName;
 			customCmdName = value.cmdName;
 			customCmdNameShort = value.cmdNameShort;
 			customCmdDescription = value.cmdDescription;
 			secret = value.secret;
-		} else schema = value;
+		} else if (isSimpleType(value)) schema = simpleTypeToZod(value);
+		else schema = value;
 		zodSchemas[key] = schema;
 		const { type, enumValues } = inferFieldType(schema);
 		fields.push({
@@ -126,7 +141,9 @@ function extractDefaults(shape) {
 */
 function normalizeToZodObject(config) {
 	const shape = {};
-	for (const [key, value] of Object.entries(config)) shape[key] = isFieldConfig(value) ? value.type : value;
+	for (const [key, value] of Object.entries(config)) if (isFieldConfig(value)) shape[key] = isSimpleType(value.type) ? simpleTypeToZod(value.type) : value.type;
+	else if (isSimpleType(value)) shape[key] = simpleTypeToZod(value);
+	else shape[key] = value;
 	return z.object(shape);
 }
 //#endregion
@@ -311,22 +328,25 @@ const STYLES = {
 	blue: (text) => `\x1b[34m${text}\x1b[0m`,
 	gray: (text) => `\x1b[90m${text}\x1b[0m`
 };
-function formatSourceValue(sv) {
+const MASK = "***";
+function formatSourceValue(sv, isSecret) {
 	if (!sv) return "-";
-	return `${sv.name}=${sv.value}`;
+	const value = isSecret ? MASK : sv.value;
+	return `${sv.name}=${value}`;
 }
-function getCellStyle(sv, isActive) {
+function getCellStyle(sv, isActive, isSecret) {
 	if (!sv) return STYLES.gray("-");
-	const text = formatSourceValue(sv);
+	const text = formatSourceValue(sv, isSecret);
 	return isActive ? STYLES.bold(text) : STYLES.dim(text);
 }
-function getFinalValueStyle(value, source) {
+function getFinalValueStyle(value, source, isSecret) {
 	if (value === void 0) return STYLES.gray("-");
+	const displayValue = isSecret ? MASK : value;
 	switch (source) {
-		case "cli": return STYLES.green(value);
-		case "env": return STYLES.yellow(value);
-		case "envFile": return STYLES.blue(value);
-		default: return STYLES.dim(value);
+		case "cli": return STYLES.green(displayValue);
+		case "env": return STYLES.yellow(displayValue);
+		case "envFile": return STYLES.blue(displayValue);
+		default: return STYLES.dim(displayValue);
 	}
 }
 function printConfiguredSources(configResult) {
@@ -354,10 +374,10 @@ function printConfiguredSources(configResult) {
 		}
 		tableData.push([
 			name,
-			getCellStyle(entry.envFile, entry.finalSource === "envFile"),
-			getCellStyle(entry.env, entry.finalSource === "env"),
-			getCellStyle(entry.cli, entry.finalSource === "cli"),
-			getFinalValueStyle(entry.finalValue, entry.finalSource)
+			getCellStyle(entry.envFile, entry.finalSource === "envFile", entry.secret),
+			getCellStyle(entry.env, entry.finalSource === "env", entry.secret),
+			getCellStyle(entry.cli, entry.finalSource === "cli", entry.secret),
+			getFinalValueStyle(entry.finalValue, entry.finalSource, entry.secret)
 		]);
 	}
 	console.log("[konfuz] Configuration sources (priority: CLI > Environment > .env file > default)\n");
@@ -420,7 +440,8 @@ function configure(config, options) {
 			cli: cliWasProvided ? {
 				name: `--${field.cmdName}`,
 				value: String(cliValue)
-			} : void 0
+			} : void 0,
+			secret: field.secret
 		};
 		if (cliWasProvided) {
 			entry.finalSource = "cli";

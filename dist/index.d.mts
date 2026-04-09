@@ -2,13 +2,15 @@ import { z } from "zod";
 
 //#region src/schema-transformer.d.ts
 type SupportedZodTypes = z.ZodNumber | z.ZodString | z.ZodBoolean | z.ZodEnum;
+type SimpleType = 'string' | 'number' | 'boolean';
+type ConfigFieldType = SupportedZodTypes | SimpleType;
 /**
  * Optional user-supplied customisation for a single configuration field.
  * Create one with the `customConfigElement()` helper and use it in place of a
  * bare Zod schema when calling `configure()`.
  */
-interface FieldConfig<T extends SupportedZodTypes = SupportedZodTypes> {
-  /** The Zod schema that validates this field's value. */
+interface FieldConfig<T extends ConfigFieldType = ConfigFieldType> {
+  /** The Zod schema or simple type that validates this field's value. */
   type: T;
   /** Override the default UPPER_SNAKE_CASE environment variable name. */
   envName?: string;
@@ -26,17 +28,18 @@ interface FieldConfig<T extends SupportedZodTypes = SupportedZodTypes> {
 }
 /**
  * The shape of the plain object a user passes to `configure()`.
- * Each value is either a bare Zod schema or a `FieldConfig` created with
+ * Each value is either a bare Zod schema, a simple type string, or a `FieldConfig` created with
  * `customConfigElement()`.
  */
-type ConfigInput = Record<string, SupportedZodTypes | FieldConfig>;
+type ConfigInput = Record<string, ConfigFieldType | FieldConfig>;
 /**
  * Creates a configuration field with custom env var and/or CLI flag names.
  *
  * @example
  * customConfigElement(z.number(), { envName: 'SERVER_PORT', cmdShort: 'p' })
  */
-declare function customConfigElement<T extends SupportedZodTypes>(type: T, options?: {
+declare function customConfigElement<T extends SupportedZodTypes>(options: {
+  type: T;
   envName?: string;
   cmdName?: string;
   cmdNameShort?: string;
@@ -60,7 +63,8 @@ interface ParseMyConfOptions {
   envPath?: string | string[];
   argv?: string[];
 }
-type InferConfig<T extends ConfigInput> = { [K in keyof T]: T[K] extends z.ZodTypeAny ? z.infer<T[K]> : T[K] extends FieldConfig ? z.infer<T[K]['type']> : never };
+type InferConfig<T extends ConfigInput> = { [K in keyof T]: T[K] extends z.ZodTypeAny ? z.infer<T[K]> : T[K] extends FieldConfig ? T[K]['type'] extends z.ZodTypeAny ? z.infer<T[K]['type']> : T[K]['type'] extends SimpleType ? SimpleToNative<T[K]['type']> : never : T[K] extends SimpleType ? SimpleToNative<T[K]> : never };
+type SimpleToNative<T extends SimpleType> = T extends 'string' ? string : T extends 'number' ? number : T extends 'boolean' ? boolean : never;
 type ConfigSource = 'cli' | 'env' | 'envFile' | 'default';
 interface SourceValue {
   name: string;
@@ -72,6 +76,7 @@ interface ConfigSourceEntry {
   envFile?: SourceValue;
   env?: SourceValue;
   cli?: SourceValue;
+  secret?: boolean;
 }
 declare module 'zod' {
   interface ZodError {
@@ -82,4 +87,4 @@ declare function configure<T extends ConfigInput>(config: T, options?: ParseMyCo
   __$sources__?: Record<string, ConfigSourceEntry>;
 };
 //#endregion
-export { ConfigSource, ConfigSourceEntry, InferConfig, ParseMyConfOptions, SourceValue, configure, customConfigElement, printConfiguredSources, toCliName, toEnvName };
+export { type ConfigFieldType, ConfigSource, ConfigSourceEntry, InferConfig, ParseMyConfOptions, type SimpleType, SourceValue, configure, customConfigElement, printConfiguredSources, toCliName, toEnvName };

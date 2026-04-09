@@ -56,6 +56,39 @@ describe('configure', () => {
     });
   });
 
+  it('accepts simple string type instead of Zod schema', () => {
+    process.env.KONFUZ_TEST_NAME = 'test-name';
+
+    const config = configure({
+      konfuzTestName: 'string',
+    });
+
+    expect(config.konfuzTestName).toBe('test-name');
+    expect(typeof config.konfuzTestName).toBe('string');
+  });
+
+  it('accepts simple number type instead of Zod schema', () => {
+    process.env.KONFUZ_TEST_PORT = '8080';
+
+    const config = configure({
+      konfuzTestPort: 'number',
+    });
+
+    expect(config.konfuzTestPort).toBe(8080);
+    expect(typeof config.konfuzTestPort).toBe('number');
+  });
+
+  it('accepts simple boolean type instead of Zod schema', () => {
+    process.env.KONFUZ_TEST_DEBUG = 'true';
+
+    const config = configure({
+      konfuzTestDebug: 'boolean',
+    });
+
+    expect(config.konfuzTestDebug).toBe(true);
+    expect(typeof config.konfuzTestDebug).toBe('boolean');
+  });
+
   it('reads from .env file', () => {
     writeFileSync(
       envPath,
