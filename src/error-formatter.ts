@@ -20,7 +20,9 @@ export function formatValidationError(
 
     // Prefer the coerced/merged value; fall back to the original raw string
     // for cases where coercion silently failed (e.g. "abc" → NaN → undefined).
-    const displayValue = merged[fieldName] ?? rawValues[fieldName];
+    // Redact the value entirely for secret fields.
+    const rawDisplay = merged[fieldName] ?? rawValues[fieldName];
+    const displayValue = field?.secret ? '***' : rawDisplay;
     const description = describeIssue(issue, displayValue);
 
     lines.push(`  - ${fieldName}: ${description}`);
