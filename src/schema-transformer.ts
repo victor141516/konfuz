@@ -26,6 +26,11 @@ export interface FieldDescriptor {
   defaultValue?: unknown;
   /** Valid string values for `'enum'` typed fields. */
   enumValues?: string[];
+  /**
+   * When `true`, the value of this field is treated as sensitive (e.g. an API
+   * key or password) and will be redacted in error messages and log output.
+   */
+  secret?: boolean;
 }
 
 /**
@@ -59,6 +64,11 @@ export interface FieldConfig<T extends z.ZodTypeAny = z.ZodTypeAny> {
   cmdNameShort?: string;
   /** Description shown next to this flag in `--help` output. */
   cmdDescription?: string;
+  /**
+   * Mark this field as sensitive. When `true`, its value is redacted
+   * (shown as `***`) in error messages and log output.
+   */
+  secret?: boolean;
 }
 
 /**
@@ -85,6 +95,7 @@ export function customConfigElement<T extends z.ZodTypeAny>(
     cmdName?: string;
     cmdNameShort?: string;
     cmdDescription?: string;
+    secret?: boolean;
   }
 ): FieldConfig<T> {
   return {
@@ -93,6 +104,7 @@ export function customConfigElement<T extends z.ZodTypeAny>(
     cmdName: options?.cmdName,
     cmdNameShort: options?.cmdNameShort,
     cmdDescription: options?.cmdDescription,
+    secret: options?.secret,
   };
 }
 
@@ -189,12 +201,15 @@ export function extractSchemaInfo(
     let customCmdNameShort: string | undefined;
     let customCmdDescription: string | undefined;
 
+    let secret: boolean | undefined;
+
     if (isFieldConfig(value)) {
       schema = value.type;
       customEnvName = value.envName;
       customCmdName = value.cmdName;
       customCmdNameShort = value.cmdNameShort;
       customCmdDescription = value.cmdDescription;
+      secret = value.secret;
     } else {
       schema = value;
     }
@@ -213,6 +228,7 @@ export function extractSchemaInfo(
       isOptional: isFieldOptional(schema),
       defaultValue: extractDefaultValue(schema),
       enumValues,
+      secret,
     });
   }
 
