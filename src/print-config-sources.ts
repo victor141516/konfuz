@@ -17,31 +17,43 @@ const STYLES = {
   gray: (text: string) => `\x1b[90m${text}\x1b[0m`,
 };
 
-function formatSourceValue(sv: SourceValue | undefined): string {
+const MASK = '***';
+
+function formatSourceValue(
+  sv: SourceValue | undefined,
+  isSecret?: boolean
+): string {
   if (!sv) return '-';
-  return `${sv.name}=${sv.value}`;
+  const value = isSecret ? MASK : sv.value;
+  return `${sv.name}=${value}`;
 }
 
-function getCellStyle(sv: SourceValue | undefined, isActive: boolean): string {
+function getCellStyle(
+  sv: SourceValue | undefined,
+  isActive: boolean,
+  isSecret?: boolean
+): string {
   if (!sv) return STYLES.gray('-');
-  const text = formatSourceValue(sv);
+  const text = formatSourceValue(sv, isSecret);
   return isActive ? STYLES.bold(text) : STYLES.dim(text);
 }
 
 function getFinalValueStyle(
   value: string | undefined,
-  source: ConfigSource
+  source: ConfigSource,
+  isSecret?: boolean
 ): string {
   if (value === undefined) return STYLES.gray('-');
+  const displayValue = isSecret ? MASK : value;
   switch (source) {
     case 'cli':
-      return STYLES.green(value);
+      return STYLES.green(displayValue);
     case 'env':
-      return STYLES.yellow(value);
+      return STYLES.yellow(displayValue);
     case 'envFile':
-      return STYLES.blue(value);
+      return STYLES.blue(displayValue);
     default:
-      return STYLES.dim(value);
+      return STYLES.dim(displayValue);
   }
 }
 
@@ -72,10 +84,14 @@ export function printConfiguredSources(configResult: ConfigResult): void {
 
     tableData.push([
       name,
-      getCellStyle(entry.envFile, entry.finalSource === 'envFile'),
-      getCellStyle(entry.env, entry.finalSource === 'env'),
-      getCellStyle(entry.cli, entry.finalSource === 'cli'),
-      getFinalValueStyle(entry.finalValue, entry.finalSource),
+      getCellStyle(
+        entry.envFile,
+        entry.finalSource === 'envFile',
+        entry.secret
+      ),
+      getCellStyle(entry.env, entry.finalSource === 'env', entry.secret),
+      getCellStyle(entry.cli, entry.finalSource === 'cli', entry.secret),
+      getFinalValueStyle(entry.finalValue, entry.finalSource, entry.secret),
     ]);
   }
 

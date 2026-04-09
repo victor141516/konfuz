@@ -108,7 +108,7 @@ describe('schema-transformer', () => {
 
     it('handles customConfigElement with envName', () => {
       const config = {
-        port: customConfigElement(z.number(), { envName: 'CUSTOM_PORT' }),
+        port: customConfigElement({ type: z.number(), envName: 'CUSTOM_PORT' }),
       };
 
       const info = extractSchemaInfo(config);
@@ -119,7 +119,7 @@ describe('schema-transformer', () => {
 
     it('handles customConfigElement with cmdName', () => {
       const config = {
-        port: customConfigElement(z.number(), { cmdName: '--my-port' }),
+        port: customConfigElement({ type: z.number(), cmdName: '--my-port' }),
       };
 
       const info = extractSchemaInfo(config);
@@ -130,7 +130,8 @@ describe('schema-transformer', () => {
 
     it('handles customConfigElement with both envName and cmdName', () => {
       const config = {
-        port: customConfigElement(z.number(), {
+        port: customConfigElement({
+          type: z.number(),
           envName: 'MY_PORT',
           cmdName: '--port-number',
         }),

@@ -289,7 +289,8 @@ describe('configure', () => {
     process.env.KONFUZ_TEST_MY_CUSTOM_PORT = '5000';
 
     const config = configure({
-      konfuzTestPort: customConfigElement(z.number(), {
+      konfuzTestPort: customConfigElement({
+        type: z.number(),
         envName: 'KONFUZ_TEST_MY_CUSTOM_PORT',
       }),
     });
@@ -301,7 +302,8 @@ describe('configure', () => {
     mockArgs(['--custom-port', '6000']);
 
     const config = configure({
-      konfuzTestPort: customConfigElement(z.number(), {
+      konfuzTestPort: customConfigElement({
+        type: z.number(),
         cmdName: '--custom-port',
       }),
     });
@@ -313,7 +315,8 @@ describe('configure', () => {
     process.env.KONFUZ_TEST_SERVER_PORT = '7000';
 
     const config = configure({
-      konfuzTestPort: customConfigElement(z.number(), {
+      konfuzTestPort: customConfigElement({
+        type: z.number(),
         envName: 'KONFUZ_TEST_SERVER_PORT',
         cmdName: '--server-port',
       }),
@@ -327,7 +330,8 @@ describe('configure', () => {
     mockArgs(['--custom-port', '8000']);
 
     const config = configure({
-      konfuzTestPort: customConfigElement(z.number(), {
+      konfuzTestPort: customConfigElement({
+        type: z.number(),
         envName: 'KONFUZ_TEST_PORT',
         cmdName: '--custom-port',
       }),
@@ -340,7 +344,10 @@ describe('configure', () => {
     mockArgs(['-p', '9000']);
 
     const config = configure({
-      konfuzTestPort: customConfigElement(z.number(), { cmdNameShort: 'p' }),
+      konfuzTestPort: customConfigElement({
+        type: z.number(),
+        cmdNameShort: 'p',
+      }),
     });
 
     expect(config.konfuzTestPort).toBe(9000);
@@ -350,7 +357,8 @@ describe('configure', () => {
     mockArgs(['--server-port', '-s', '7500']);
 
     const config = configure({
-      konfuzTestServerPort: customConfigElement(z.number(), {
+      konfuzTestServerPort: customConfigElement({
+        type: z.number(),
         cmdName: '--server-port',
         cmdNameShort: 's',
       }),

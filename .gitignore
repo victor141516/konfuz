@@ -1,5 +1,5 @@
 node_modules
-test-env-temp
+src/zzzz.ts
 tsconfig.tsbuildinfo
 coverage
 .kilo

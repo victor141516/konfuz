@@ -14,7 +14,6 @@ import {
   type CliConfig,
   type CliParseResult,
 } from './cli-parser';
-import { validateSupportedSchemas } from './validate-schemas';
 import { parseEnvVariables, type EnvConfig } from './env-parser';
 
 export interface ParseMyConfOptions {
@@ -45,6 +44,7 @@ export interface ConfigSourceEntry {
   envFile?: SourceValue;
   env?: SourceValue;
   cli?: SourceValue;
+  secret?: boolean;
 }
 
 declare module 'zod' {
@@ -110,6 +110,7 @@ export function configure<T extends ConfigInput>(
       cli: cliWasProvided
         ? { name: `--${field.cmdName}`, value: String(cliValue) }
         : undefined,
+      secret: field.secret,
     };
 
     if (cliWasProvided) {

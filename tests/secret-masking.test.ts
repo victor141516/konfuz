@@ -26,7 +26,8 @@ describe('secret field masking', () => {
     process.env.KONFUZ_TEST_API_KEY = 'my-secret-key';
 
     const config = configure({
-      apiKey: customConfigElement(z.string(), {
+      apiKey: customConfigElement({
+        type: z.string(),
         envName: 'KONFUZ_TEST_API_KEY',
         secret: true,
       }),
@@ -42,7 +43,7 @@ describe('secret field masking', () => {
     let message = '';
     try {
       configure({
-        port: customConfigElement(z.number(), { secret: true }),
+        port: customConfigElement({ type: z.number(), secret: true }),
       });
     } catch (e: unknown) {
       message = (e as Error).message;
@@ -57,7 +58,8 @@ describe('secret field masking', () => {
     let message = '';
     try {
       configure({
-        apiKey: customConfigElement(z.string(), {
+        apiKey: customConfigElement({
+          type: z.string(),
           envName: 'KONFUZ_TEST_API_KEY',
           secret: true,
         }),
@@ -92,7 +94,8 @@ describe('secret field masking', () => {
     try {
       configure({
         port: z.number(),
-        apiKey: customConfigElement(z.string(), {
+        apiKey: customConfigElement({
+          type: z.string(),
           envName: 'KONFUZ_TEST_API_KEY',
           secret: true,
         }),
@@ -110,7 +113,8 @@ describe('secret field masking', () => {
     let message = '';
     try {
       configure({
-        apiKey: customConfigElement(z.string(), {
+        apiKey: customConfigElement({
+          type: z.string(),
           envName: 'KONFUZ_TEST_API_SECRET',
           secret: true,
         }),
