@@ -12,7 +12,7 @@ import { parseEnvVariables, type EnvConfig } from './env-parser';
 import { parseCliArguments, type CliConfig } from './cli-parser';
 
 export interface ParseMyConfOptions {
-  envPath?: string;
+  envPath?: string | string[];
   argv?: string[];
 }
 
