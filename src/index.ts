@@ -24,7 +24,7 @@ export interface ParseMyConfOptions {
 
 export { customConfigElement };
 
-type InferConfig<T extends ConfigInput> = {
+export type InferConfig<T extends ConfigInput> = {
   [K in keyof T]: T[K] extends z.ZodTypeAny
     ? z.infer<T[K]>
     : T[K] extends FieldConfig
@@ -57,7 +57,7 @@ export function configure<T extends ConfigInput>(
   config: T,
   options?: ParseMyConfOptions
 ): InferConfig<T> & { __$sources__?: Record<string, ConfigSourceEntry> } {
-  validateSupportedSchemas(config as ConfigInput);
+  // validateSupportedSchemas(config as ConfigInput);
 
   const info = extractSchemaInfo(config as ConfigInput);
 

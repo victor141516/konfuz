@@ -48,12 +48,14 @@ export interface SchemaDescriptor {
   zodSchemas: Record<string, z.ZodType>;
 }
 
+type SupportedZodTypes = z.ZodNumber | z.ZodString | z.ZodBoolean | z.ZodEnum;
+
 /**
  * Optional user-supplied customisation for a single configuration field.
  * Create one with the `customConfigElement()` helper and use it in place of a
  * bare Zod schema when calling `configure()`.
  */
-export interface FieldConfig<T extends z.ZodTypeAny = z.ZodTypeAny> {
+export interface FieldConfig<T extends SupportedZodTypes = SupportedZodTypes> {
   /** The Zod schema that validates this field's value. */
   type: T;
   /** Override the default UPPER_SNAKE_CASE environment variable name. */
@@ -76,7 +78,7 @@ export interface FieldConfig<T extends z.ZodTypeAny = z.ZodTypeAny> {
  * Each value is either a bare Zod schema or a `FieldConfig` created with
  * `customConfigElement()`.
  */
-export type ConfigInput = Record<string, z.ZodTypeAny | FieldConfig>;
+export type ConfigInput = Record<string, SupportedZodTypes | FieldConfig>;
 
 // ---------------------------------------------------------------------------
 // Public helpers
@@ -88,18 +90,16 @@ export type ConfigInput = Record<string, z.ZodTypeAny | FieldConfig>;
  * @example
  * customConfigElement(z.number(), { envName: 'SERVER_PORT', cmdShort: 'p' })
  */
-export function customConfigElement<T extends z.ZodTypeAny>(
-  type: T,
-  options?: {
-    envName?: string;
-    cmdName?: string;
-    cmdNameShort?: string;
-    cmdDescription?: string;
-    secret?: boolean;
-  }
-): FieldConfig<T> {
+export function customConfigElement<T extends SupportedZodTypes>(options: {
+  type: T;
+  envName?: string;
+  cmdName?: string;
+  cmdNameShort?: string;
+  cmdDescription?: string;
+  secret?: boolean;
+}): FieldConfig<T> {
   return {
-    type,
+    type: options.type,
     envName: options?.envName,
     cmdName: options?.cmdName,
     cmdNameShort: options?.cmdNameShort,
@@ -151,7 +151,7 @@ function inferFieldType(schema: z.ZodType): {
  */
 function extractDefaultValue(schema: z.ZodType): unknown {
   if (schema instanceof z.ZodDefault) {
-    const defaultValue = schema._def.defaultValue;
+    const defaultValue = schema.def.defaultValue;
     return typeof defaultValue === 'function' ? defaultValue() : defaultValue;
   }
   return undefined;
@@ -168,7 +168,7 @@ function isFieldOptional(schema: z.ZodType): boolean {
 
 /** Type guard: returns `true` when a config entry is a `FieldConfig` rather than a bare Zod schema. */
 function isFieldConfig(
-  value: z.ZodTypeAny | FieldConfig
+  value: SupportedZodTypes | FieldConfig
 ): value is FieldConfig {
   return (
     typeof value === 'object' &&
@@ -186,13 +186,11 @@ function isFieldConfig(
  * Analyses a user-provided config object (or `z.ZodObject`) and returns a
  * `SchemaDescriptor` containing per-field metadata and the raw Zod schemas.
  */
-export function extractSchemaInfo(
-  config: ConfigInput | z.ZodObject<z.ZodRawShape>
-): SchemaDescriptor {
+export function extractSchemaInfo(config: ConfigInput): SchemaDescriptor {
   const fields: FieldDescriptor[] = [];
   const zodSchemas: Record<string, z.ZodType> = {};
 
-  const entries: [string, FieldConfig][] = Object.entries(config);
+  const entries = Object.entries(config) as [string, FieldConfig][];
 
   for (const [key, value] of entries) {
     let schema: z.ZodType;
@@ -260,8 +258,8 @@ export function extractDefaults(
  */
 export function normalizeToZodObject<T extends ConfigInput>(
   config: T
-): z.ZodObject<Record<string, z.ZodTypeAny>> {
-  const shape: Record<string, z.ZodTypeAny> = {};
+): z.ZodObject<Record<string, SupportedZodTypes>> {
+  const shape: Record<string, SupportedZodTypes> = {};
 
   for (const [key, value] of Object.entries(config)) {
     shape[key] = isFieldConfig(value) ? value.type : value;

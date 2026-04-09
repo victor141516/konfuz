@@ -50,7 +50,7 @@ function inferFieldType(schema) {
 */
 function extractDefaultValue(schema) {
 	if (schema instanceof z.ZodDefault) {
-		const defaultValue = schema._def.defaultValue;
+		const defaultValue = schema.def.defaultValue;
 		return typeof defaultValue === "function" ? defaultValue() : defaultValue;
 	}
 }
@@ -254,60 +254,6 @@ function parseCliArguments(info, options) {
 	return config;
 }
 //#endregion
-//#region src/validate-schemas.ts
-const UNSUPPORTED_TYPE_NAMES = new Set([
-	"ZodObject",
-	"ZodArray",
-	"ZodUnion",
-	"ZodRecord",
-	"ZodTuple",
-	"ZodIntersection",
-	"ZodDiscriminatedUnion",
-	"ZodTransform",
-	"ZodFunction",
-	"ZodPromise",
-	"ZodMap",
-	"ZodSet"
-]);
-function isSupportedSchemaType(schema) {
-	const name = schema.constructor.name;
-	if (UNSUPPORTED_TYPE_NAMES.has(name)) return false;
-	if (schema instanceof z.ZodString || schema instanceof z.ZodNumber || schema instanceof z.ZodBoolean || schema instanceof z.ZodEnum || schema instanceof z.ZodLazy) return true;
-	const def = schema._def;
-	if (def?.innerType) return isSupportedSchemaType(def.innerType);
-	if (def?.getter) try {
-		return isSupportedSchemaType(def.getter());
-	} catch {
-		return false;
-	}
-	return false;
-}
-function schemaFriendlyName(schema) {
-	return schema.constructor.name.replace("Zod", "");
-}
-function isZodSchema(value) {
-	if (value === null || typeof value !== "object") return false;
-	const name = value.constructor?.name;
-	return name ? name.startsWith("Zod") : false;
-}
-function validateSupportedSchemas(config) {
-	for (const [key, value] of Object.entries(config)) {
-		const schema = typeof value === "object" && value !== null && "type" in value && value.type instanceof z.ZodType ? value.type : value;
-		if (!isZodSchema(schema)) throw new Error(`[konfuz] Unexpected config key "${key}": expected a Zod schema or customConfigElement(), got ${typeof schema}. Use z.string(), z.number(), z.boolean(), or z.enum() for config fields.`);
-		const zodSchema = schema;
-		const name = zodSchema.constructor.name;
-		if (UNSUPPORTED_TYPE_NAMES.has(name)) {
-			const friendlyName = schemaFriendlyName(zodSchema);
-			const hint = name === "ZodObject" ? `Use z.string() or z.number() for field "${key}".` : name === "ZodArray" ? `Use z.string() for a single string field, or split into separate fields.` : name === "ZodUnion" ? `Ensure all union members are supported types (string, number, boolean, enum).` : `Use z.string(), z.number(), z.boolean(), or z.enum() for field "${key}".`;
-			throw new Error(`[konfuz] Unsupported schema type: ${friendlyName}. Only primitive types (string, number, boolean, enum) and their optional/default wrappers are supported. ${hint}`);
-		}
-		if (!isSupportedSchemaType(zodSchema)) {
-			const friendlyName = schemaFriendlyName(zodSchema);
-			throw new Error(`[konfuz] Unsupported schema type: ${friendlyName}. Use z.string(), z.number(), z.boolean(), or z.enum() for field "${key}".`);
-		}
-	}
-}
-//#endregion
 //#region src/env-parser.ts
 function parseEnvVariables(info, envFileConfig) {
 	const config = {};
@@ -441,7 +387,6 @@ function printConfiguredSources(configResult) {
 //#endregion
 //#region src/index.ts
 function configure(config, options) {
-	validateSupportedSchemas(config);
 	const info = extractSchemaInfo(config);
 	const schema = normalizeToZodObject(config);
 	const defaults = extractDefaults(schema.shape);

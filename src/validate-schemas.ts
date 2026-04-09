@@ -15,7 +15,7 @@ const UNSUPPORTED_TYPE_NAMES = new Set([
   'ZodSet',
 ]);
 
-export function isSupportedSchemaType(schema: z.ZodTypeAny): boolean {
+function isSupportedSchemaType(schema: z.ZodTypeAny): boolean {
   const name = schema.constructor.name;
 
   if (UNSUPPORTED_TYPE_NAMES.has(name)) return false;
