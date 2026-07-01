@@ -14,6 +14,7 @@ import { loadEnvFile, type EnvFileConfig } from './loader';
 import { parseExplicitCliArguments } from './cli-parser';
 import { parseEnvFileVariables, parseProcessEnvVariables } from './env-parser';
 import {
+  CONFIG_FILE_FLAG,
   loadConfigFile,
   normalizeConfigFileOption,
   parseConfigFileCliOption,
@@ -92,6 +93,33 @@ function getCliSourceName(cmdName: string): string {
   return cmdName.startsWith('--') ? cmdName : `--${cmdName}`;
 }
 
+function getMergedFinalValue(
+  merged: Record<string, unknown>,
+  name: string
+): string | undefined {
+  if (!hasOwn(merged, name) || merged[name] === undefined) {
+    return undefined;
+  }
+
+  return String(merged[name]);
+}
+
+function assertConfigFileFlagIsAvailable(
+  info: ReturnType<typeof extractSchemaInfo>
+): void {
+  const field = info.fields.find(
+    (field) => getCliSourceName(field.cmdName) === CONFIG_FILE_FLAG
+  );
+
+  if (!field) {
+    return;
+  }
+
+  throw new Error(
+    `[konfuz] ${CONFIG_FILE_FLAG} is reserved for JSON config files when options.configFile is enabled. Field "${field.name}" uses the same CLI flag; set a different cmdName with customConfigElement().`
+  );
+}
+
 export function configure<T extends ConfigInput>(
   config: T,
   options?: ParseMyConfOptions
@@ -110,6 +138,8 @@ export function configure<T extends ConfigInput>(
   let configFileResult = emptyConfigFileParseResult();
 
   if (configFileOption.enabled) {
+    assertConfigFileFlagIsAvailable(info);
+
     const parsedConfigFileCli = parseConfigFileCliOption(rawArgv);
     argv = parsedConfigFileCli.argv;
 
@@ -193,13 +223,13 @@ export function configure<T extends ConfigInput>(
       entry.finalValue = envValue;
     } else if (configFileValue !== undefined) {
       entry.finalSource = 'configFile';
-      entry.finalValue = configFileValue.value;
+      entry.finalValue = getMergedFinalValue(merged, name);
     } else if (envFileValue !== undefined) {
       entry.finalSource = 'envFile';
       entry.finalValue = envFileValue;
     } else if (defaultConfigFileValue !== undefined) {
       entry.finalSource = 'defaultConfigFile';
-      entry.finalValue = defaultConfigFileValue.value;
+      entry.finalValue = getMergedFinalValue(merged, name);
     } else if (hasOwn(merged, name) && merged[name] !== undefined) {
       entry.finalValue = String(merged[name]);
     }

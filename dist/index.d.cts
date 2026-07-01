@@ -55,7 +55,7 @@ type ConfigInput = Record<string, ConfigFieldType | FieldConfig>;
  * Creates a configuration field with custom env var and/or CLI flag names.
  *
  * @example
- * customConfigElement(z.number(), { envName: 'SERVER_PORT', cmdShort: 'p' })
+ * customConfigElement({ type: z.number(), envName: 'SERVER_PORT', cmdNameShort: 'p' })
  */
 declare function customConfigElement<T extends SupportedZodTypes>(options: {
   type: T;

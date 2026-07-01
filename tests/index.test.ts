@@ -512,6 +512,11 @@ describe('configure', () => {
         name: `${explicitPath}:.konfuzTestPort`,
         value: '5000',
       });
+      expect(sources!.konfuzTestHost.configFile).toEqual({
+        name: `${explicitPath}:.konfuzTestHost`,
+        value: '"json-host"',
+      });
+      expect(sources!.konfuzTestHost.finalValue).toBe('json-host');
       expect(sources!.konfuzTestPort.cli).toBeUndefined();
     });
 
@@ -541,6 +546,30 @@ describe('configure', () => {
         .__$sources__;
       expect(sources!.konfuzTestPort.finalSource).toBe('envFile');
       expect(sources!.konfuzTestHost.finalSource).toBe('defaultConfigFile');
+      expect(sources!.konfuzTestHost.finalValue).toBe('default-json-host');
+    });
+
+    it('rejects field CLI flags that collide with --config-file when JSON support is enabled', () => {
+      expect(() =>
+        configure(
+          {
+            configFile: z.string().default('field-value'),
+          },
+          { configFile: true, argv: [] }
+        )
+      ).toThrow('--config-file is reserved');
+
+      expect(() =>
+        configure(
+          {
+            customName: customConfigElement({
+              type: z.string().default('field-value'),
+              cmdName: '--config-file',
+            }),
+          },
+          { configFile: true, argv: [] }
+        )
+      ).toThrow('Field "customName"');
     });
 
     it('uses explicit JSON instead of layering it on top of configured default JSON', () => {

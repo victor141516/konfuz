@@ -11,7 +11,7 @@ import table from "table";
 * Creates a configuration field with custom env var and/or CLI flag names.
 *
 * @example
-* customConfigElement(z.number(), { envName: 'SERVER_PORT', cmdShort: 'p' })
+* customConfigElement({ type: z.number(), envName: 'SERVER_PORT', cmdNameShort: 'p' })
 */
 function customConfigElement(options) {
 	return {
@@ -390,14 +390,14 @@ function parseConfigFileCliOption(argv) {
 	let explicitPath;
 	for (let index = 0; index < argv.length; index += 1) {
 		const arg = argv[index];
-		if (arg === CONFIG_FILE_FLAG) {
+		if (arg === "--config-file") {
 			const value = argv[index + 1];
 			if (value === void 0 || value === "" || value.startsWith("-")) throw new Error(CONFIG_FILE_MISSING_PATH_ERROR);
 			explicitPath = value;
 			index += 1;
 			continue;
 		}
-		if (arg.startsWith(`${CONFIG_FILE_FLAG}=`)) {
+		if (arg.startsWith(`--config-file=`)) {
 			const value = arg.slice(14);
 			if (value === "") throw new Error(CONFIG_FILE_MISSING_PATH_ERROR);
 			explicitPath = value;
@@ -625,6 +625,15 @@ function hasOwn(object, key) {
 function getCliSourceName(cmdName) {
 	return cmdName.startsWith("--") ? cmdName : `--${cmdName}`;
 }
+function getMergedFinalValue(merged, name) {
+	if (!hasOwn(merged, name) || merged[name] === void 0) return;
+	return String(merged[name]);
+}
+function assertConfigFileFlagIsAvailable(info) {
+	const field = info.fields.find((field) => getCliSourceName(field.cmdName) === CONFIG_FILE_FLAG);
+	if (!field) return;
+	throw new Error(`[konfuz] ${CONFIG_FILE_FLAG} is reserved for JSON config files when options.configFile is enabled. Field "${field.name}" uses the same CLI flag; set a different cmdName with customConfigElement().`);
+}
 function configure(config, options) {
 	const info = extractSchemaInfo(config);
 	const schema = normalizeToZodObject(config);
@@ -635,6 +644,7 @@ function configure(config, options) {
 	let defaultConfigFileResult = emptyConfigFileParseResult();
 	let configFileResult = emptyConfigFileParseResult();
 	if (configFileOption.enabled) {
+		assertConfigFileFlagIsAvailable(info);
 		const parsedConfigFileCli = parseConfigFileCliOption(rawArgv);
 		argv = parsedConfigFileCli.argv;
 		if (parsedConfigFileCli.explicitPath !== void 0) {
@@ -691,13 +701,13 @@ function configure(config, options) {
 			entry.finalValue = envValue;
 		} else if (configFileValue !== void 0) {
 			entry.finalSource = "configFile";
-			entry.finalValue = configFileValue.value;
+			entry.finalValue = getMergedFinalValue(merged, name);
 		} else if (envFileValue !== void 0) {
 			entry.finalSource = "envFile";
 			entry.finalValue = envFileValue;
 		} else if (defaultConfigFileValue !== void 0) {
 			entry.finalSource = "defaultConfigFile";
-			entry.finalValue = defaultConfigFileValue.value;
+			entry.finalValue = getMergedFinalValue(merged, name);
 		} else if (hasOwn(merged, name) && merged[name] !== void 0) entry.finalValue = String(merged[name]);
 		sources[name] = entry;
 	}

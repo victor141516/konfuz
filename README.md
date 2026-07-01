@@ -188,6 +188,8 @@ node app.js --config-file=local.config
 
 Default JSON files are silently ignored when missing. Explicit `--config-file` paths must exist. If both a default JSON file and `--config-file` are configured, the explicit file replaces default JSON discovery rather than layering on top of it. Paths are resolved relative to `process.cwd()` and do not need to end in `.json`; contents are always parsed as JSON.
 
+When JSON config support is enabled, `--config-file` is reserved for the JSON file path. If a field would generate or customize its CLI flag to `--config-file`, set a different `cmdName` with `customConfigElement()`.
+
 JSON values are passed to Zod as native JSON values, without `.env`-style string coercion. For example, `{ "port": 3000 }` is valid for `z.number()`, while `{ "port": "3000" }` is only valid if the schema accepts a string or performs its own coercion. JSON `null` is treated as present and is passed to Zod as `null`.
 
 Unknown JSON keys are ignored. By default, each field reads its original `configure()` key from the JSON root:

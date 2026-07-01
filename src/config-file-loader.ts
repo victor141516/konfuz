@@ -25,7 +25,7 @@ export interface LoadedConfigFile {
   data: Record<string, unknown>;
 }
 
-const CONFIG_FILE_FLAG = '--config-file';
+export const CONFIG_FILE_FLAG = '--config-file';
 const CONFIG_FILE_MISSING_PATH_ERROR =
   '[konfuz] --config-file requires a JSON file path.';
 
