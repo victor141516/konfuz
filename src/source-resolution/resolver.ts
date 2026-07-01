@@ -1,18 +1,19 @@
 import { hideBin } from 'yargs/helpers';
 import type { z } from 'zod';
-import { parseExplicitCliArguments } from './cli-parser';
+import { parseExplicitCliArguments } from '../sources/cli/parser';
 import {
   resolveConfigFileSource,
   type ConfigFileOption,
-} from './config-file-loader';
-import { parseEnvFileVariables, parseProcessEnvVariables } from './env-parser';
-import { loadEnvFile, type EnvFileConfig } from './loader';
-import { extractDefaults, type SchemaDescriptor } from './schema-transformer';
-import type { ConfigSourceEntry } from './source-ledger';
+} from '../sources/config-file/source';
+import { parseEnvFileVariables } from '../sources/env-file/parser';
+import { loadEnvFile, type EnvFileConfig } from '../sources/env-file/loader';
+import { parseProcessEnvVariables } from '../sources/env-var/parser';
+import { extractDefaults, type SchemaDescriptor } from '../schema-transformer';
+import type { ConfigSourceEntry } from './ledger';
 import {
   getCliSourceName,
   getPresentValueAsString,
-} from './source-value-utils';
+} from '../utils/source-values';
 
 export interface SourceResolverOptions {
   envPath?: string | string[];

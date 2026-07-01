@@ -4,7 +4,7 @@ import {
   normalizeConfigFileOption,
   parseConfigFileCliOption,
   resolveConfigFileSource,
-} from '../src/config-file-loader';
+} from '../src/sources/config-file/source';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { z } from 'zod';

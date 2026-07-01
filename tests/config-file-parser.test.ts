@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { parseConfigFileValues } from '../src/config-file-parser';
-import { parseConfigLookupPath } from '../src/config-lookup-path';
+import { parseConfigFileValues } from '../src/sources/config-file/parser';
+import { parseConfigLookupPath } from '../src/sources/config-file/lookup-path';
 import {
   customConfigElement,
   extractSchemaInfo,
 } from '../src/schema-transformer';
-import type { LoadedConfigFile } from '../src/config-file-loader';
+import type { LoadedConfigFile } from '../src/sources/config-file/source';
 
 describe('config-file-parser', () => {
   afterEach(() => {

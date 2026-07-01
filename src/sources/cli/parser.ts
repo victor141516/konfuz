@@ -1,9 +1,9 @@
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
-import { coerceCliBooleanValue } from './primitive-value-utils';
-import { SchemaDescriptor } from './schema-transformer';
+import { coerceCliBooleanValue } from '../../utils/primitive-values';
+import { SchemaDescriptor } from '../../schema-transformer';
 import { globalGenerator } from './short-param';
-import { toSourceValue } from './source-value-utils';
+import { toSourceValue } from '../../utils/source-values';
 
 export interface CliConfig {
   [key: string]: string | number | boolean | undefined;

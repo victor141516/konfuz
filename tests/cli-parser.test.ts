@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   parseCliArguments,
   parseExplicitCliArguments,
-} from '../src/cli-parser';
+} from '../src/sources/cli/parser';
 import { extractSchemaInfo } from '../src/schema-transformer';
 import { z } from 'zod';
 

@@ -1,5 +1,5 @@
-import { isJsonObject } from './json-utils';
-import { hasOwn } from './object-utils';
+import { isJsonObject } from '../../utils/json';
+import { hasOwn } from '../../utils/object';
 
 export interface ConfigLookupPathInput {
   fieldName: string;

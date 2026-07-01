@@ -71,12 +71,12 @@ declare function toEnvName(key: string): string;
 /** Converts a camelCase key to kebab-case (e.g. `databaseHost` → `database-host`). */
 declare function toCliName(key: string): string;
 //#endregion
-//#region src/config-file-loader.d.ts
+//#region src/sources/config-file/source.d.ts
 type ConfigFileOption = boolean | string | {
   defaultPath: string;
 };
 //#endregion
-//#region src/source-ledger.d.ts
+//#region src/source-resolution/ledger.d.ts
 type ConfigSource = 'cli' | 'env' | 'configFile' | 'envFile' | 'defaultConfigFile' | 'default';
 interface SourceValue {
   name: string;
@@ -93,7 +93,7 @@ interface ConfigSourceEntry {
   secret?: boolean;
 }
 //#endregion
-//#region src/source-resolver.d.ts
+//#region src/source-resolution/resolver.d.ts
 interface SourceResolverOptions {
   envPath?: string | string[];
   argv?: string[];

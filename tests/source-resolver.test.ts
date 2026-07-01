@@ -6,7 +6,7 @@ import {
   extractSchemaInfo,
   normalizeToZodObject,
 } from '../src/schema-transformer';
-import { resolveConfigSources } from '../src/source-resolver';
+import { resolveConfigSources } from '../src/source-resolution/resolver';
 
 describe('source-resolver', () => {
   const testDir = join(process.cwd(), '.temp-source-resolver');

@@ -1,11 +1,14 @@
-import type { FieldDescriptor, SchemaDescriptor } from './schema-transformer';
-import type { LoadedConfigFile } from './config-file-loader';
+import type {
+  FieldDescriptor,
+  SchemaDescriptor,
+} from '../../schema-transformer';
+import type { LoadedConfigFile } from './source';
 import {
   parseConfigLookupPath,
   readConfigLookupPath,
   type ConfigLookupPath,
-} from './config-lookup-path';
-import { stringifyJsonValue } from './json-utils';
+} from './lookup-path';
+import { stringifyJsonValue } from '../../utils/json';
 
 interface ConfigFileSourceValue {
   name: string;

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { parseConfigLookupPath } from './config-lookup-path';
+import { parseConfigLookupPath } from './sources/config-file/lookup-path';
 
 /** The set of primitive field types the library understands and can coerce from strings. */
 export type FieldType = 'string' | 'number' | 'boolean' | 'enum';

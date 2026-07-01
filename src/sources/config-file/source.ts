@@ -4,10 +4,10 @@ import {
   emptyConfigFileParseResult,
   parseConfigFileValues,
   type ConfigFileParseResult,
-} from './config-file-parser';
-import { isJsonObject } from './json-utils';
-import type { SchemaDescriptor } from './schema-transformer';
-import { getCliSourceName } from './source-value-utils';
+} from './parser';
+import { isJsonObject } from '../../utils/json';
+import type { SchemaDescriptor } from '../../schema-transformer';
+import { getCliSourceName } from '../../utils/source-values';
 
 export type ConfigFileOption =
   | boolean

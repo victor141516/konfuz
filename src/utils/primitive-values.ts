@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import type { FieldType } from './schema-transformer';
-import type { SourcePrimitive } from './source-value-utils';
+import type { FieldType } from '../schema-transformer';
+import type { SourcePrimitive } from './source-values';
 
 const BOOLEAN_TRUE_VALUES = new Set(['1', 'true', 'yes']);
 const BOOLEAN_FALSE_VALUES = new Set(['0', 'false', 'no']);

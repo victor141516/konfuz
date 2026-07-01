@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { loadEnvFile } from '../src/loader';
+import { loadEnvFile } from '../src/sources/env-file/loader';
 import { writeFileSync, unlinkSync, mkdirSync, rmSync, existsSync } from 'fs';
 import { join } from 'path';
 

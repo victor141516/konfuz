@@ -1,4 +1,4 @@
-import { hasOwn } from './object-utils';
+import { hasOwn } from './object';
 
 export type SourcePrimitive = string | number | boolean;
 

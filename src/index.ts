@@ -11,8 +11,8 @@ import {
 import {
   resolveConfigSources,
   type SourceResolverOptions,
-} from './source-resolver';
-import type { InternalSources } from './source-ledger';
+} from './source-resolution/resolver';
+import type { InternalSources } from './source-resolution/ledger';
 
 export interface ParseMyConfOptions extends SourceResolverOptions {}
 
@@ -45,7 +45,7 @@ export type {
   ConfigSource,
   ConfigSourceEntry,
   SourceValue,
-} from './source-ledger';
+} from './source-resolution/ledger';
 
 export function configure<T extends ConfigInput>(
   config: T,

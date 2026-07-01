@@ -32,7 +32,7 @@ let path = require("path");
 let dotenv = require("dotenv");
 let table = require("table");
 table = __toESM(table);
-//#region src/json-utils.ts
+//#region src/utils/json.ts
 function isJsonObject(value) {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -41,12 +41,12 @@ function stringifyJsonValue(value) {
 	return serialized === void 0 ? String(value) : serialized;
 }
 //#endregion
-//#region src/object-utils.ts
+//#region src/utils/object.ts
 function hasOwn(object, key) {
 	return Object.prototype.hasOwnProperty.call(object, key);
 }
 //#endregion
-//#region src/config-lookup-path.ts
+//#region src/sources/config-file/lookup-path.ts
 /**
 * Owns the small dot-notation used for JSON config lookup.
 */
@@ -245,7 +245,7 @@ function normalizeToZodObject(config) {
 	return zod.z.object(shape);
 }
 //#endregion
-//#region src/primitive-value-utils.ts
+//#region src/utils/primitive-values.ts
 const BOOLEAN_TRUE_VALUES = new Set([
 	"1",
 	"true",
@@ -286,7 +286,7 @@ function parseStringValueForField(value, type, enumValues) {
 	return value;
 }
 //#endregion
-//#region src/short-param.ts
+//#region src/sources/cli/short-param.ts
 const base = "abcdefghijklmnopqrstuvwxyz".split("");
 function decode(id) {
 	let result = "";
@@ -334,7 +334,7 @@ var ShortParamGenerator = class {
 };
 const globalGenerator = new ShortParamGenerator();
 //#endregion
-//#region src/source-value-utils.ts
+//#region src/utils/source-values.ts
 function toSourceValue(value) {
 	return String(value);
 }
@@ -346,7 +346,7 @@ function getPresentValueAsString(values, name) {
 	return String(values[name]);
 }
 //#endregion
-//#region src/cli-parser.ts
+//#region src/sources/cli/parser.ts
 function parseConfiguredCliArguments(info, argv) {
 	const config = {};
 	const rawValues = {};
@@ -395,7 +395,7 @@ function parseExplicitCliArguments(info, options) {
 	return parseConfiguredCliArguments(info, options?.argv ?? (0, yargs_helpers.hideBin)(process.argv));
 }
 //#endregion
-//#region src/config-file-parser.ts
+//#region src/sources/config-file/parser.ts
 function emptyConfigFileParseResult() {
 	return {
 		config: {},
@@ -440,7 +440,7 @@ function parseConfigFileValues(info, file) {
 	};
 }
 //#endregion
-//#region src/config-file-loader.ts
+//#region src/sources/config-file/source.ts
 const CONFIG_FILE_FLAG = "--config-file";
 const CONFIG_FILE_MISSING_PATH_ERROR = "[konfuz] --config-file requires a JSON file path.";
 function isNodeError(error) {
@@ -554,15 +554,7 @@ function resolveConfigFileSource(info, option, rawArgv) {
 	};
 }
 //#endregion
-//#region src/env-parser.ts
-function parseProcessEnvVariables(info) {
-	const config = {};
-	for (const field of info.fields) {
-		const envValue = process.env[field.envName];
-		if (envValue !== void 0) config[field.name] = parseStringValueForField(envValue, field.type, field.enumValues);
-	}
-	return config;
-}
+//#region src/sources/env-file/parser.ts
 function parseEnvFileVariables(info, envFileConfig) {
 	const config = {};
 	for (const [key, value] of Object.entries(envFileConfig)) {
@@ -572,7 +564,7 @@ function parseEnvFileVariables(info, envFileConfig) {
 	return config;
 }
 //#endregion
-//#region src/loader.ts
+//#region src/sources/env-file/loader.ts
 function loadSingleEnvFile(envPath) {
 	try {
 		return (0, dotenv.parse)((0, fs.readFileSync)(envPath, "utf-8"));
@@ -590,7 +582,17 @@ function loadEnvFile(envPath) {
 	return loadSingleEnvFile(envPath ?? (0, path.resolve)(process.cwd(), ".env"));
 }
 //#endregion
-//#region src/source-resolver.ts
+//#region src/sources/env-var/parser.ts
+function parseProcessEnvVariables(info) {
+	const config = {};
+	for (const field of info.fields) {
+		const envValue = process.env[field.envName];
+		if (envValue !== void 0) config[field.name] = parseStringValueForField(envValue, field.type, field.enumValues);
+	}
+	return config;
+}
+//#endregion
+//#region src/source-resolution/resolver.ts
 function resolveConfigSources(info, shape, options) {
 	const defaults = extractDefaults(shape);
 	const rawArgv = options?.argv ?? (0, yargs_helpers.hideBin)(process.argv);
@@ -660,7 +662,7 @@ function resolveConfigSources(info, shape, options) {
 	};
 }
 //#endregion
-//#region src/source-ledger.ts
+//#region src/source-resolution/ledger.ts
 const SOURCE_PRIORITY_LABEL = "CLI > Environment > JSON file > .env file > Default JSON > default";
 const SOURCE_LEDGER_COLUMNS = [
 	{
