@@ -17,6 +17,10 @@ export interface ConfigFileParseResult {
   sourceValues: Record<string, ConfigFileSourceValue>;
 }
 
+export function emptyConfigFileParseResult(): ConfigFileParseResult {
+  return { config: {}, sourceValues: {} };
+}
+
 function warnNonObjectIntermediate(
   file: LoadedConfigFile,
   field: FieldDescriptor,

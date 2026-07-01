@@ -9,6 +9,10 @@ import { parseEnvFileVariables, parseProcessEnvVariables } from './env-parser';
 import { loadEnvFile, type EnvFileConfig } from './loader';
 import { extractDefaults, type SchemaDescriptor } from './schema-transformer';
 import type { ConfigSourceEntry } from './source-ledger';
+import {
+  getCliSourceName,
+  getPresentValueAsString,
+} from './source-value-utils';
 
 export interface SourceResolverOptions {
   envPath?: string | string[];
@@ -19,25 +23,6 @@ export interface SourceResolverOptions {
 export interface SourceResolution {
   config: Record<string, unknown>;
   sources: Record<string, ConfigSourceEntry>;
-}
-
-function hasOwn(object: Record<string, unknown>, key: string): boolean {
-  return Object.prototype.hasOwnProperty.call(object, key);
-}
-
-function getCliSourceName(cmdName: string): string {
-  return cmdName.startsWith('--') ? cmdName : `--${cmdName}`;
-}
-
-function getMergedFinalValue(
-  merged: Record<string, unknown>,
-  name: string
-): string | undefined {
-  if (!hasOwn(merged, name) || merged[name] === undefined) {
-    return undefined;
-  }
-
-  return String(merged[name]);
 }
 
 export function resolveConfigSources(
@@ -110,15 +95,18 @@ export function resolveConfigSources(
       entry.finalValue = envValue;
     } else if (configFileValue !== undefined) {
       entry.finalSource = 'configFile';
-      entry.finalValue = getMergedFinalValue(config, name);
+      entry.finalValue = getPresentValueAsString(config, name);
     } else if (envFileValue !== undefined) {
       entry.finalSource = 'envFile';
       entry.finalValue = envFileValue;
     } else if (defaultConfigFileValue !== undefined) {
       entry.finalSource = 'defaultConfigFile';
-      entry.finalValue = getMergedFinalValue(config, name);
-    } else if (hasOwn(config, name) && config[name] !== undefined) {
-      entry.finalValue = String(config[name]);
+      entry.finalValue = getPresentValueAsString(config, name);
+    } else {
+      const defaultValue = getPresentValueAsString(config, name);
+      if (defaultValue !== undefined) {
+        entry.finalValue = defaultValue;
+      }
     }
 
     sources[name] = entry;

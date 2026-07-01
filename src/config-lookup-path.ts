@@ -1,4 +1,5 @@
 import { isJsonObject } from './json-utils';
+import { hasOwn } from './object-utils';
 
 export interface ConfigLookupPathInput {
   fieldName: string;
@@ -77,7 +78,7 @@ export function readConfigLookupPath(
       return { found: false, failedAt: `.${traversedSegments.join('.')}` };
     }
 
-    if (!Object.prototype.hasOwnProperty.call(current, segment)) {
+    if (!hasOwn(current, segment)) {
       return { found: false };
     }
 

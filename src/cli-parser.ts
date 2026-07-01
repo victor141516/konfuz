@@ -1,7 +1,9 @@
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
+import { coerceCliBooleanValue } from './primitive-value-utils';
 import { SchemaDescriptor } from './schema-transformer';
 import { globalGenerator } from './short-param';
+import { toSourceValue } from './source-value-utils';
 
 export interface CliConfig {
   [key: string]: string | number | boolean | undefined;
@@ -11,26 +13,6 @@ export interface CliParseResult {
   config: CliConfig;
   rawValues: Record<string, string>;
   sourceValues: Record<string, string>;
-}
-
-const BOOLEAN_TRUE_VALUES = new Set(['1', 'true', 'yes']);
-const BOOLEAN_FALSE_VALUES = new Set(['0', 'false', 'no']);
-
-function coerceBooleanValue(value: string | boolean): boolean | undefined {
-  if (typeof value === 'boolean') {
-    return false;
-  }
-  if (value === '') {
-    return true;
-  }
-  const lower = value.toLowerCase();
-  if (BOOLEAN_TRUE_VALUES.has(lower)) return true;
-  if (BOOLEAN_FALSE_VALUES.has(lower)) return false;
-  return undefined;
-}
-
-function toSourceValue(value: string | number | boolean): string {
-  return String(value);
 }
 
 function parseConfiguredCliArguments(
@@ -84,7 +66,7 @@ function parseConfiguredCliArguments(
     const value = (parsed as any)[cliName];
     if (value !== undefined) {
       if (field.type === 'boolean') {
-        const coerced = coerceBooleanValue(value);
+        const coerced = coerceCliBooleanValue(value);
         if (coerced !== undefined) {
           config[field.name] = coerced;
           sourceValues[field.name] = toSourceValue(coerced);

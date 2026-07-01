@@ -1,11 +1,13 @@
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import {
+  emptyConfigFileParseResult,
   parseConfigFileValues,
   type ConfigFileParseResult,
 } from './config-file-parser';
 import { isJsonObject } from './json-utils';
 import type { SchemaDescriptor } from './schema-transformer';
+import { getCliSourceName } from './source-value-utils';
 
 export type ConfigFileOption =
   | boolean
@@ -48,14 +50,6 @@ function assertNonEmptyPath(path: string, optionName: string): void {
   if (path === '') {
     throw new Error(`[konfuz] ${optionName} must not be an empty string.`);
   }
-}
-
-function emptyConfigFileParseResult(): ConfigFileParseResult {
-  return { config: {}, sourceValues: {} };
-}
-
-function getCliSourceName(cmdName: string): string {
-  return cmdName.startsWith('--') ? cmdName : `--${cmdName}`;
 }
 
 function assertConfigFileFlagIsAvailable(info: SchemaDescriptor): void {

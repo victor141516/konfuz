@@ -15,6 +15,11 @@ function stringifyJsonValue(value) {
 	return serialized === void 0 ? String(value) : serialized;
 }
 //#endregion
+//#region src/object-utils.ts
+function hasOwn(object, key) {
+	return Object.prototype.hasOwnProperty.call(object, key);
+}
+//#endregion
 //#region src/config-lookup-path.ts
 /**
 * Owns the small dot-notation used for JSON config lookup.
@@ -53,7 +58,7 @@ function readConfigLookupPath(data, lookupPath) {
 			found: false,
 			failedAt: `.${traversedSegments.join(".")}`
 		};
-		if (!Object.prototype.hasOwnProperty.call(current, segment)) return { found: false };
+		if (!hasOwn(current, segment)) return { found: false };
 		current = current[segment];
 		traversedSegments.push(segment);
 	}
@@ -214,6 +219,47 @@ function normalizeToZodObject(config) {
 	return z.object(shape);
 }
 //#endregion
+//#region src/primitive-value-utils.ts
+const BOOLEAN_TRUE_VALUES = new Set([
+	"1",
+	"true",
+	"yes"
+]);
+const BOOLEAN_FALSE_VALUES = new Set([
+	"0",
+	"false",
+	"no"
+]);
+function coerceBooleanString(value) {
+	const lower = value.toLowerCase();
+	if (BOOLEAN_TRUE_VALUES.has(lower)) return true;
+	if (BOOLEAN_FALSE_VALUES.has(lower)) return false;
+}
+function isBooleanString(value) {
+	const lower = value.toLowerCase();
+	return BOOLEAN_TRUE_VALUES.has(lower) || BOOLEAN_FALSE_VALUES.has(lower);
+}
+function coerceCliBooleanValue(value) {
+	if (typeof value === "boolean") return false;
+	if (value === "") return true;
+	return coerceBooleanString(value);
+}
+function parseStringValueForField(value, type, enumValues) {
+	if (type === "boolean") return coerceBooleanString(value);
+	if (type === "number") {
+		const numResult = z.coerce.number().safeParse(value);
+		if (numResult.success) return numResult.data;
+		if (isBooleanString(value)) return;
+		return;
+	}
+	if (type === "enum") {
+		const result = z.enum(enumValues).safeParse(value);
+		if (result.success) return result.data;
+		return;
+	}
+	return value;
+}
+//#endregion
 //#region src/short-param.ts
 const base = "abcdefghijklmnopqrstuvwxyz".split("");
 function decode(id) {
@@ -262,27 +308,19 @@ var ShortParamGenerator = class {
 };
 const globalGenerator = new ShortParamGenerator();
 //#endregion
-//#region src/cli-parser.ts
-const BOOLEAN_TRUE_VALUES$1 = new Set([
-	"1",
-	"true",
-	"yes"
-]);
-const BOOLEAN_FALSE_VALUES$1 = new Set([
-	"0",
-	"false",
-	"no"
-]);
-function coerceBooleanValue(value) {
-	if (typeof value === "boolean") return false;
-	if (value === "") return true;
-	const lower = value.toLowerCase();
-	if (BOOLEAN_TRUE_VALUES$1.has(lower)) return true;
-	if (BOOLEAN_FALSE_VALUES$1.has(lower)) return false;
-}
+//#region src/source-value-utils.ts
 function toSourceValue(value) {
 	return String(value);
 }
+function getCliSourceName(cmdName) {
+	return cmdName.startsWith("--") ? cmdName : `--${cmdName}`;
+}
+function getPresentValueAsString(values, name) {
+	if (!hasOwn(values, name) || values[name] === void 0) return;
+	return String(values[name]);
+}
+//#endregion
+//#region src/cli-parser.ts
 function parseConfiguredCliArguments(info, argv) {
 	const config = {};
 	const rawValues = {};
@@ -311,7 +349,7 @@ function parseConfiguredCliArguments(info, argv) {
 	for (const field of info.fields) {
 		const value = parsed[field.cmdName];
 		if (value !== void 0) if (field.type === "boolean") {
-			const coerced = coerceBooleanValue(value);
+			const coerced = coerceCliBooleanValue(value);
 			if (coerced !== void 0) {
 				config[field.name] = coerced;
 				sourceValues[field.name] = toSourceValue(coerced);
@@ -332,6 +370,12 @@ function parseExplicitCliArguments(info, options) {
 }
 //#endregion
 //#region src/config-file-parser.ts
+function emptyConfigFileParseResult() {
+	return {
+		config: {},
+		sourceValues: {}
+	};
+}
 function warnNonObjectIntermediate(file, field, lookupPath, traversedPath) {
 	console.warn(`[konfuz] Found non-object value at "${traversedPath}" while looking for "${lookupPath}" in configuration file "${file.path}". Treating "${field.name}" as missing from that file.`);
 }
@@ -379,17 +423,8 @@ function isNodeError(error) {
 function assertNonEmptyPath(path, optionName) {
 	if (path === "") throw new Error(`[konfuz] ${optionName} must not be an empty string.`);
 }
-function emptyConfigFileParseResult() {
-	return {
-		config: {},
-		sourceValues: {}
-	};
-}
-function getCliSourceName$1(cmdName) {
-	return cmdName.startsWith("--") ? cmdName : `--${cmdName}`;
-}
 function assertConfigFileFlagIsAvailable(info) {
-	const field = info.fields.find((field) => getCliSourceName$1(field.cmdName) === CONFIG_FILE_FLAG);
+	const field = info.fields.find((field) => getCliSourceName(field.cmdName) === CONFIG_FILE_FLAG);
 	if (!field) return;
 	throw new Error(`[konfuz] ${CONFIG_FILE_FLAG} is reserved for JSON config files when options.configFile is enabled. Field "${field.name}" uses the same CLI flag; set a different cmdName with customConfigElement().`);
 }
@@ -498,7 +533,7 @@ function parseProcessEnvVariables(info) {
 	const config = {};
 	for (const field of info.fields) {
 		const envValue = process.env[field.envName];
-		if (envValue !== void 0) config[field.name] = parseWithZod(envValue, field.type, field.enumValues);
+		if (envValue !== void 0) config[field.name] = parseStringValueForField(envValue, field.type, field.enumValues);
 	}
 	return config;
 }
@@ -506,43 +541,9 @@ function parseEnvFileVariables(info, envFileConfig) {
 	const config = {};
 	for (const [key, value] of Object.entries(envFileConfig)) {
 		const field = info.fields.find((f) => f.envName === key);
-		if (field && value !== void 0) config[field.name] = parseWithZod(value, field.type, field.enumValues);
+		if (field && value !== void 0) config[field.name] = parseStringValueForField(value, field.type, field.enumValues);
 	}
 	return config;
-}
-const BOOLEAN_TRUE_VALUES = new Set([
-	"1",
-	"true",
-	"yes"
-]);
-const BOOLEAN_FALSE_VALUES = new Set([
-	"0",
-	"false",
-	"no"
-]);
-function coerceBoolean(value) {
-	const lower = value.toLowerCase();
-	if (BOOLEAN_TRUE_VALUES.has(lower)) return true;
-	if (BOOLEAN_FALSE_VALUES.has(lower)) return false;
-}
-function isBooleanString(value) {
-	const lower = value.toLowerCase();
-	return BOOLEAN_TRUE_VALUES.has(lower) || BOOLEAN_FALSE_VALUES.has(lower);
-}
-function parseWithZod(value, type, enumValues) {
-	if (type === "boolean") return coerceBoolean(value);
-	if (type === "number") {
-		const numResult = z.coerce.number().safeParse(value);
-		if (numResult.success) return numResult.data;
-		if (isBooleanString(value)) return;
-		return;
-	}
-	if (type === "enum") {
-		const result = z.enum(enumValues).safeParse(value);
-		if (result.success) return result.data;
-		return;
-	}
-	return value;
 }
 //#endregion
 //#region src/loader.ts
@@ -564,16 +565,6 @@ function loadEnvFile(envPath) {
 }
 //#endregion
 //#region src/source-resolver.ts
-function hasOwn(object, key) {
-	return Object.prototype.hasOwnProperty.call(object, key);
-}
-function getCliSourceName(cmdName) {
-	return cmdName.startsWith("--") ? cmdName : `--${cmdName}`;
-}
-function getMergedFinalValue(merged, name) {
-	if (!hasOwn(merged, name) || merged[name] === void 0) return;
-	return String(merged[name]);
-}
 function resolveConfigSources(info, shape, options) {
 	const defaults = extractDefaults(shape);
 	const rawArgv = options?.argv ?? hideBin(process.argv);
@@ -624,14 +615,17 @@ function resolveConfigSources(info, shape, options) {
 			entry.finalValue = envValue;
 		} else if (configFileValue !== void 0) {
 			entry.finalSource = "configFile";
-			entry.finalValue = getMergedFinalValue(config, name);
+			entry.finalValue = getPresentValueAsString(config, name);
 		} else if (envFileValue !== void 0) {
 			entry.finalSource = "envFile";
 			entry.finalValue = envFileValue;
 		} else if (defaultConfigFileValue !== void 0) {
 			entry.finalSource = "defaultConfigFile";
-			entry.finalValue = getMergedFinalValue(config, name);
-		} else if (hasOwn(config, name) && config[name] !== void 0) entry.finalValue = String(config[name]);
+			entry.finalValue = getPresentValueAsString(config, name);
+		} else {
+			const defaultValue = getPresentValueAsString(config, name);
+			if (defaultValue !== void 0) entry.finalValue = defaultValue;
+		}
 		sources[name] = entry;
 	}
 	return {
