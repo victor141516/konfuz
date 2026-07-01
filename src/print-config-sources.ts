@@ -1,17 +1,13 @@
 import table from 'table';
-import type { ConfigSourceEntry, SourceValue } from './index';
-
-export type ConfigSource =
-  | 'cli'
-  | 'env'
-  | 'configFile'
-  | 'envFile'
-  | 'defaultConfigFile'
-  | 'default';
-
-export interface InternalSources {
-  __$sources__?: Record<string, ConfigSourceEntry>;
-}
+import {
+  getLedgerSourceValue,
+  SOURCE_LEDGER_COLUMNS,
+  SOURCE_PRIORITY_LABEL,
+  type ConfigSource,
+  type ConfigSourceEntry,
+  type InternalSources,
+  type SourceValue,
+} from './source-ledger';
 
 const STYLES = {
   bold: (text: string) => `\x1b[1m${text}\x1b[0m`,
@@ -90,11 +86,7 @@ export function printConfiguredSources(configResult: unknown): void {
   const tableData: string[][] = [
     [
       STYLES.bold('Field'),
-      STYLES.bold('Default JSON'),
-      STYLES.bold('.env file'),
-      STYLES.bold('JSON file'),
-      STYLES.bold('Environment'),
-      STYLES.bold('CLI'),
+      ...SOURCE_LEDGER_COLUMNS.map((column) => STYLES.bold(column.label)),
       STYLES.bold('Final value'),
     ],
   ];
@@ -102,47 +94,38 @@ export function printConfiguredSources(configResult: unknown): void {
   for (const name of fieldNames) {
     const entry = sources[name] as ConfigSourceEntry;
     if (!entry) {
-      tableData.push([name, '-', '-', '-', '-', '-', '-']);
+      tableData.push([name, ...SOURCE_LEDGER_COLUMNS.map(() => '-'), '-']);
       continue;
     }
 
     tableData.push([
       name,
-      getCellStyle(
-        entry.defaultConfigFile,
-        entry.finalSource === 'defaultConfigFile',
-        entry.secret
+      ...SOURCE_LEDGER_COLUMNS.map((column) =>
+        getCellStyle(
+          getLedgerSourceValue(entry, column.key),
+          entry.finalSource === column.source,
+          entry.secret
+        )
       ),
-      getCellStyle(
-        entry.envFile,
-        entry.finalSource === 'envFile',
-        entry.secret
-      ),
-      getCellStyle(
-        entry.configFile,
-        entry.finalSource === 'configFile',
-        entry.secret
-      ),
-      getCellStyle(entry.env, entry.finalSource === 'env', entry.secret),
-      getCellStyle(entry.cli, entry.finalSource === 'cli', entry.secret),
       getFinalValueStyle(entry.finalValue, entry.finalSource, entry.secret),
     ]);
   }
 
   console.log(
-    '[konfuz] Configuration sources (priority: CLI > Environment > JSON file > .env file > Default JSON > default)\n'
+    `[konfuz] Configuration sources (priority: ${SOURCE_PRIORITY_LABEL})\n`
   );
+  const columns = Object.fromEntries([
+    [0, { width: 20, truncate: 20 }],
+    ...SOURCE_LEDGER_COLUMNS.map((column, index) => [
+      index + 1,
+      { width: column.width, truncate: column.width },
+    ]),
+    [SOURCE_LEDGER_COLUMNS.length + 1, { width: 20, truncate: 20 }],
+  ]);
+
   console.log(
     table.table(tableData, {
-      columns: {
-        0: { width: 20, truncate: 20 },
-        1: { width: 30, truncate: 30 },
-        2: { width: 30, truncate: 30 },
-        3: { width: 30, truncate: 30 },
-        4: { width: 30, truncate: 30 },
-        5: { width: 30, truncate: 30 },
-        6: { width: 20, truncate: 20 },
-      },
+      columns,
     })
   );
 }

@@ -3,9 +3,12 @@ import {
   loadConfigFile,
   normalizeConfigFileOption,
   parseConfigFileCliOption,
+  resolveConfigFileSource,
 } from '../src/config-file-loader';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
+import { z } from 'zod';
+import { extractSchemaInfo } from '../src/schema-transformer';
 
 describe('config-file-loader', () => {
   const testDir = join(process.cwd(), '.temp-config-loader');
@@ -106,5 +109,29 @@ describe('config-file-loader', () => {
     expect(() => loadConfigFile(arrayRoot, { required: true })).toThrow(
       'must contain a JSON object at the root'
     );
+  });
+
+  it('resolves JSON config source through one interface', () => {
+    const defaultPath = join(testDir, 'default.json');
+    const explicitPath = join(testDir, 'explicit.json');
+    writeFileSync(defaultPath, '{"port":3000,"host":"default"}');
+    writeFileSync(explicitPath, '{"host":"explicit"}');
+
+    const result = resolveConfigFileSource(
+      extractSchemaInfo({
+        port: z.number().default(1000),
+        host: z.string(),
+      }),
+      defaultPath,
+      ['--config-file', explicitPath, '--port', '5000']
+    );
+
+    expect(result.argv).toEqual(['--port', '5000']);
+    expect(result.defaultConfigFile.config).toEqual({});
+    expect(result.configFile.config).toEqual({ host: 'explicit' });
+    expect(result.configFile.sourceValues.host).toEqual({
+      name: `${explicitPath}:.host`,
+      value: '"explicit"',
+    });
   });
 });

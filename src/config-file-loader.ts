@@ -1,6 +1,11 @@
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
+import {
+  parseConfigFileValues,
+  type ConfigFileParseResult,
+} from './config-file-parser';
 import { isJsonObject } from './json-utils';
+import type { SchemaDescriptor } from './schema-transformer';
 
 export type ConfigFileOption =
   | boolean
@@ -25,6 +30,12 @@ export interface LoadedConfigFile {
   data: Record<string, unknown>;
 }
 
+export interface ConfigFileSourceResult {
+  argv: string[];
+  defaultConfigFile: ConfigFileParseResult;
+  configFile: ConfigFileParseResult;
+}
+
 export const CONFIG_FILE_FLAG = '--config-file';
 const CONFIG_FILE_MISSING_PATH_ERROR =
   '[konfuz] --config-file requires a JSON file path.';
@@ -37,6 +48,28 @@ function assertNonEmptyPath(path: string, optionName: string): void {
   if (path === '') {
     throw new Error(`[konfuz] ${optionName} must not be an empty string.`);
   }
+}
+
+function emptyConfigFileParseResult(): ConfigFileParseResult {
+  return { config: {}, sourceValues: {} };
+}
+
+function getCliSourceName(cmdName: string): string {
+  return cmdName.startsWith('--') ? cmdName : `--${cmdName}`;
+}
+
+function assertConfigFileFlagIsAvailable(info: SchemaDescriptor): void {
+  const field = info.fields.find(
+    (field) => getCliSourceName(field.cmdName) === CONFIG_FILE_FLAG
+  );
+
+  if (!field) {
+    return;
+  }
+
+  throw new Error(
+    `[konfuz] ${CONFIG_FILE_FLAG} is reserved for JSON config files when options.configFile is enabled. Field "${field.name}" uses the same CLI flag; set a different cmdName with customConfigElement().`
+  );
 }
 
 export function normalizeConfigFileOption(
@@ -134,4 +167,63 @@ export function loadConfigFile(
   }
 
   return { path, resolvedPath, data };
+}
+
+export function resolveConfigFileSource(
+  info: SchemaDescriptor,
+  option: ConfigFileOption | undefined,
+  rawArgv: string[]
+): ConfigFileSourceResult {
+  const normalizedOption = normalizeConfigFileOption(option);
+  const emptyDefault = emptyConfigFileParseResult();
+  const emptyExplicit = emptyConfigFileParseResult();
+
+  if (!normalizedOption.enabled) {
+    return {
+      argv: rawArgv,
+      defaultConfigFile: emptyDefault,
+      configFile: emptyExplicit,
+    };
+  }
+
+  assertConfigFileFlagIsAvailable(info);
+
+  const parsedConfigFileCli = parseConfigFileCliOption(rawArgv);
+
+  if (parsedConfigFileCli.explicitPath !== undefined) {
+    const explicitConfigFile = loadConfigFile(
+      parsedConfigFileCli.explicitPath,
+      {
+        required: true,
+      }
+    );
+
+    return {
+      argv: parsedConfigFileCli.argv,
+      defaultConfigFile: emptyDefault,
+      configFile: explicitConfigFile
+        ? parseConfigFileValues(info, explicitConfigFile)
+        : emptyExplicit,
+    };
+  }
+
+  if (normalizedOption.defaultPath !== undefined) {
+    const defaultConfigFile = loadConfigFile(normalizedOption.defaultPath, {
+      required: false,
+    });
+
+    return {
+      argv: parsedConfigFileCli.argv,
+      defaultConfigFile: defaultConfigFile
+        ? parseConfigFileValues(info, defaultConfigFile)
+        : emptyDefault,
+      configFile: emptyExplicit,
+    };
+  }
+
+  return {
+    argv: parsedConfigFileCli.argv,
+    defaultConfigFile: emptyDefault,
+    configFile: emptyExplicit,
+  };
 }

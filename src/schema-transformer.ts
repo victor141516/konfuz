@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { parseConfigLookupPath } from './config-lookup-path';
 
 /** The set of primitive field types the library understands and can coerce from strings. */
 export type FieldType = 'string' | 'number' | 'boolean' | 'enum';
@@ -237,28 +238,6 @@ function isFieldConfig(
   );
 }
 
-function validateConfigPath(configPath: string, fieldName: string): void {
-  if (!configPath.startsWith('.')) {
-    throw new Error(
-      `[konfuz] configPath for "${fieldName}" must start with ".".`
-    );
-  }
-
-  const body = configPath.slice(1);
-  if (body === '') return;
-
-  const segments = body.split('.');
-  for (const [index, segment] of segments.entries()) {
-    const isTrailingEmptySegment =
-      segment === '' && index === segments.length - 1;
-    if (segment === '' && !isTrailingEmptySegment) {
-      throw new Error(
-        `[konfuz] configPath for "${fieldName}" must not contain empty middle segments.`
-      );
-    }
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Public schema-analysis functions
 // ---------------------------------------------------------------------------
@@ -307,7 +286,10 @@ export function extractSchemaInfo(config: ConfigInput): SchemaDescriptor {
     const { type, enumValues } = inferFieldType(schema);
 
     if (customConfigPath !== undefined) {
-      validateConfigPath(customConfigPath, key);
+      parseConfigLookupPath({
+        fieldName: key,
+        configPath: customConfigPath,
+      });
     }
 
     fields.push({

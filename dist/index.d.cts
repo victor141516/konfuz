@@ -76,17 +76,7 @@ type ConfigFileOption = boolean | string | {
   defaultPath: string;
 };
 //#endregion
-//#region src/print-config-sources.d.ts
-declare function printConfiguredSources(configResult: unknown): void;
-//#endregion
-//#region src/index.d.ts
-interface ParseMyConfOptions {
-  envPath?: string | string[];
-  argv?: string[];
-  configFile?: ConfigFileOption;
-}
-type InferConfig<T extends ConfigInput> = { [K in keyof T]: T[K] extends z.ZodTypeAny ? z.infer<T[K]> : T[K] extends FieldConfig ? T[K]['type'] extends z.ZodTypeAny ? z.infer<T[K]['type']> : T[K]['type'] extends SimpleType ? SimpleToNative<T[K]['type']> : never : T[K] extends SimpleType ? SimpleToNative<T[K]> : never };
-type SimpleToNative<T extends SimpleType> = T extends 'string' ? string : T extends 'number' ? number : T extends 'boolean' ? boolean : never;
+//#region src/source-ledger.d.ts
 type ConfigSource = 'cli' | 'env' | 'configFile' | 'envFile' | 'defaultConfigFile' | 'default';
 interface SourceValue {
   name: string;
@@ -102,6 +92,21 @@ interface ConfigSourceEntry {
   cli?: SourceValue;
   secret?: boolean;
 }
+//#endregion
+//#region src/source-resolver.d.ts
+interface SourceResolverOptions {
+  envPath?: string | string[];
+  argv?: string[];
+  configFile?: ConfigFileOption;
+}
+//#endregion
+//#region src/print-config-sources.d.ts
+declare function printConfiguredSources(configResult: unknown): void;
+//#endregion
+//#region src/index.d.ts
+interface ParseMyConfOptions extends SourceResolverOptions {}
+type InferConfig<T extends ConfigInput> = { [K in keyof T]: T[K] extends z.ZodTypeAny ? z.infer<T[K]> : T[K] extends FieldConfig ? T[K]['type'] extends z.ZodTypeAny ? z.infer<T[K]['type']> : T[K]['type'] extends SimpleType ? SimpleToNative<T[K]['type']> : never : T[K] extends SimpleType ? SimpleToNative<T[K]> : never };
+type SimpleToNative<T extends SimpleType> = T extends 'string' ? string : T extends 'number' ? number : T extends 'boolean' ? boolean : never;
 declare function configure<T extends ConfigInput>(config: T, options?: ParseMyConfOptions): InferConfig<T>;
 //#endregion
-export { type ConfigFieldType, ConfigSource, ConfigSourceEntry, InferConfig, ParseMyConfOptions, type SimpleType, SourceValue, configure, customConfigElement, printConfiguredSources, toCliName, toEnvName };
+export { type ConfigFieldType, type ConfigSource, type ConfigSourceEntry, InferConfig, ParseMyConfOptions, type SimpleType, type SourceValue, configure, customConfigElement, printConfiguredSources, toCliName, toEnvName };

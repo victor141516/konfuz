@@ -1,9 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import {
-  parseConfigFileValues,
-  resolveConfigLookupPath,
-} from '../src/config-file-parser';
+import { parseConfigFileValues } from '../src/config-file-parser';
+import { parseConfigLookupPath } from '../src/config-lookup-path';
 import {
   customConfigElement,
   extractSchemaInfo,
@@ -140,14 +138,23 @@ describe('config-file-parser', () => {
       }),
     });
 
-    expect(resolveConfigLookupPath(info.fields[0]).displayPath).toBe(
-      '.defaultRoot'
-    );
-    expect(resolveConfigLookupPath(info.fields[1]).displayPath).toBe(
-      '.explicitRoot'
-    );
-    expect(resolveConfigLookupPath(info.fields[2]).displayPath).toBe(
-      '.server.nestedDefault'
-    );
+    expect(
+      parseConfigLookupPath({
+        fieldName: info.fields[0].name,
+        configPath: info.fields[0].configPath,
+      }).displayPath
+    ).toBe('.defaultRoot');
+    expect(
+      parseConfigLookupPath({
+        fieldName: info.fields[1].name,
+        configPath: info.fields[1].configPath,
+      }).displayPath
+    ).toBe('.explicitRoot');
+    expect(
+      parseConfigLookupPath({
+        fieldName: info.fields[2].name,
+        configPath: info.fields[2].configPath,
+      }).displayPath
+    ).toBe('.server.nestedDefault');
   });
 });

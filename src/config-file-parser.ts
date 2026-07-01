@@ -1,6 +1,11 @@
 import type { FieldDescriptor, SchemaDescriptor } from './schema-transformer';
 import type { LoadedConfigFile } from './config-file-loader';
-import { isJsonObject, stringifyJsonValue } from './json-utils';
+import {
+  parseConfigLookupPath,
+  readConfigLookupPath,
+  type ConfigLookupPath,
+} from './config-lookup-path';
+import { stringifyJsonValue } from './json-utils';
 
 interface ConfigFileSourceValue {
   name: string;
@@ -10,39 +15,6 @@ interface ConfigFileSourceValue {
 export interface ConfigFileParseResult {
   config: Record<string, unknown>;
   sourceValues: Record<string, ConfigFileSourceValue>;
-}
-
-function hasOwn(object: Record<string, unknown>, key: string): boolean {
-  return Object.prototype.hasOwnProperty.call(object, key);
-}
-
-/**
- * Converts a field's configured `configPath` into the exact object-key segments
- * used for lookup and the canonical display path used in source reporting.
- */
-export function resolveConfigLookupPath(field: FieldDescriptor): {
-  segments: string[];
-  displayPath: string;
-} {
-  const rawPath = field.configPath;
-
-  if (rawPath === undefined || rawPath === '.') {
-    return {
-      segments: [field.name],
-      displayPath: `.${field.name}`,
-    };
-  }
-
-  const segments = rawPath.slice(1).split('.');
-  if (segments[segments.length - 1] === '') {
-    segments.pop();
-    segments.push(field.name);
-  }
-
-  return {
-    segments,
-    displayPath: `.${segments.join('.')}`,
-  };
 }
 
 function warnNonObjectIntermediate(
@@ -63,32 +35,19 @@ function warnNonObjectIntermediate(
 function readPath(
   file: LoadedConfigFile,
   field: FieldDescriptor,
-  segments: string[],
-  displayPath: string
+  lookupPath: ConfigLookupPath
 ): { found: true; value: unknown } | { found: false } {
-  let current: unknown = file.data;
-  const traversedSegments: string[] = [];
-
-  for (const segment of segments) {
-    if (!isJsonObject(current)) {
-      warnNonObjectIntermediate(
-        file,
-        field,
-        displayPath,
-        `.${traversedSegments.join('.')}`
-      );
-      return { found: false };
-    }
-
-    if (!hasOwn(current, segment)) {
-      return { found: false };
-    }
-
-    current = current[segment];
-    traversedSegments.push(segment);
+  const result = readConfigLookupPath(file.data, lookupPath);
+  if (!result.found && result.failedAt !== undefined) {
+    warnNonObjectIntermediate(
+      file,
+      field,
+      lookupPath.displayPath,
+      result.failedAt
+    );
   }
 
-  return { found: true, value: current };
+  return result.found ? result : { found: false };
 }
 
 /**
@@ -103,15 +62,18 @@ export function parseConfigFileValues(
   const sourceValues: Record<string, ConfigFileSourceValue> = {};
 
   for (const field of info.fields) {
-    const { segments, displayPath } = resolveConfigLookupPath(field);
-    const result = readPath(file, field, segments, displayPath);
+    const lookupPath = parseConfigLookupPath({
+      fieldName: field.name,
+      configPath: field.configPath,
+    });
+    const result = readPath(file, field, lookupPath);
     if (!result.found) {
       continue;
     }
 
     config[field.name] = result.value;
     sourceValues[field.name] = {
-      name: `${file.path}:${displayPath}`,
+      name: `${file.path}:${lookupPath.displayPath}`,
       value: stringifyJsonValue(result.value),
     };
   }
