@@ -494,6 +494,24 @@ function parseConfigFileCliOption(argv) {
 		explicitPath
 	};
 }
+function stripDisabledConfigFileCliOption(argv) {
+	const strippedArgv = [];
+	for (let index = 0; index < argv.length; index += 1) {
+		const arg = argv[index];
+		if (arg === "--") {
+			strippedArgv.push(...argv.slice(index));
+			break;
+		}
+		if (arg === "--config-file") {
+			const value = argv[index + 1];
+			if (value !== void 0 && !value.startsWith("-")) index += 1;
+			continue;
+		}
+		if (arg.startsWith(`--config-file=`)) continue;
+		strippedArgv.push(arg);
+	}
+	return strippedArgv;
+}
 function loadConfigFile(path$2, options) {
 	const resolvedPath = (0, path.resolve)(process.cwd(), path$2);
 	let content;
@@ -524,7 +542,7 @@ function resolveConfigFileSource(info, option, rawArgv) {
 	const emptyDefault = emptyConfigFileParseResult();
 	const emptyExplicit = emptyConfigFileParseResult();
 	if (!normalizedOption.enabled) return {
-		argv: rawArgv,
+		argv: stripDisabledConfigFileCliOption(rawArgv),
 		defaultConfigFile: emptyDefault,
 		configFile: emptyExplicit
 	};

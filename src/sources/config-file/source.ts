@@ -125,6 +125,35 @@ export function parseConfigFileCliOption(
   return { argv: strippedArgv, explicitPath };
 }
 
+export function stripDisabledConfigFileCliOption(argv: string[]): string[] {
+  const strippedArgv: string[] = [];
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+
+    if (arg === '--') {
+      strippedArgv.push(...argv.slice(index));
+      break;
+    }
+
+    if (arg === CONFIG_FILE_FLAG) {
+      const value = argv[index + 1];
+      if (value !== undefined && !value.startsWith('-')) {
+        index += 1;
+      }
+      continue;
+    }
+
+    if (arg.startsWith(`${CONFIG_FILE_FLAG}=`)) {
+      continue;
+    }
+
+    strippedArgv.push(arg);
+  }
+
+  return strippedArgv;
+}
+
 export function loadConfigFile(
   path: string,
   options: { required: boolean }
@@ -179,7 +208,7 @@ export function resolveConfigFileSource(
 
   if (!normalizedOption.enabled) {
     return {
-      argv: rawArgv,
+      argv: stripDisabledConfigFileCliOption(rawArgv),
       defaultConfigFile: emptyDefault,
       configFile: emptyExplicit,
     };

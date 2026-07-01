@@ -1,4 +1,66 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+const inMemoryFs = vi.hoisted(() => {
+  const files = new Map<string, string>();
+  const directories = new Set<string>();
+
+  function toPathString(path: unknown): string {
+    return String(path);
+  }
+
+  function createNotFoundError(path: unknown): NodeJS.ErrnoException {
+    const error = new Error(
+      `ENOENT: no such file or directory, open '${String(path)}'`
+    ) as NodeJS.ErrnoException;
+    error.code = 'ENOENT';
+    return error;
+  }
+
+  return {
+    reset: () => {
+      files.clear();
+      directories.clear();
+    },
+    existsSync: (path: unknown) => {
+      const pathString = toPathString(path);
+      return files.has(pathString) || directories.has(pathString);
+    },
+    mkdirSync: (path: unknown) => {
+      directories.add(toPathString(path));
+      return undefined;
+    },
+    readFileSync: (path: unknown) => {
+      const pathString = toPathString(path);
+      const content = files.get(pathString);
+      if (content === undefined) {
+        throw createNotFoundError(path);
+      }
+      return content;
+    },
+    unlinkSync: (path: unknown) => {
+      const pathString = toPathString(path);
+      if (!files.delete(pathString)) {
+        throw createNotFoundError(path);
+      }
+    },
+    writeFileSync: (path: unknown, data: unknown) => {
+      const content =
+        typeof data === 'string'
+          ? data
+          : Buffer.from(data as Buffer).toString();
+      files.set(toPathString(path), content);
+    },
+  };
+});
+
+vi.mock('fs', () => ({
+  existsSync: inMemoryFs.existsSync,
+  mkdirSync: inMemoryFs.mkdirSync,
+  readFileSync: inMemoryFs.readFileSync,
+  unlinkSync: inMemoryFs.unlinkSync,
+  writeFileSync: inMemoryFs.writeFileSync,
+}));
+
 import {
   configure,
   customConfigElement,
@@ -25,6 +87,7 @@ describe('configure', () => {
 
   beforeEach(() => {
     vi.resetModules();
+    inMemoryFs.reset();
     process.env = { ...originalEnv };
     Object.defineProperty(process, 'argv', {
       value: originalArgv,
@@ -494,6 +557,27 @@ describe('configure', () => {
       expect(sources!.konfuzTestPort.finalSource).toBe('default');
       expect(sources!.konfuzTestPort.cli).toBeUndefined();
       expect(sources!.konfuzTestPort.configFile).toBeUndefined();
+    });
+
+    it('does not bind disabled --config-file to a same-named config field', () => {
+      const config = configure(
+        {
+          configFile: z.string().default('field-default'),
+          konfuzTestPort: z.number().default(3000),
+        },
+        {
+          argv: ['--config-file', 'ignored.json', '--konfuz-test-port', '5000'],
+        }
+      );
+
+      expect(config.configFile).toBe('field-default');
+      expect(config.konfuzTestPort).toBe(5000);
+
+      const sources = (config as { __$sources__?: Record<string, any> })
+        .__$sources__;
+      expect(sources!.configFile.cli).toBeUndefined();
+      expect(sources!.configFile.finalSource).toBe('default');
+      expect(sources!.konfuzTestPort.finalSource).toBe('cli');
     });
 
     it('enables JSON support without requiring a file when configFile is true', () => {

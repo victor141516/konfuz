@@ -4,6 +4,7 @@ import {
   normalizeConfigFileOption,
   parseConfigFileCliOption,
   resolveConfigFileSource,
+  stripDisabledConfigFileCliOption,
 } from '../src/sources/config-file/source';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
@@ -88,6 +89,26 @@ describe('config-file-loader', () => {
     expect(() =>
       parseConfigFileCliOption(['--config-file', '--port', '3000'])
     ).toThrow('--config-file requires a JSON file path');
+  });
+
+  it('strips disabled --config-file without validating it', () => {
+    expect(
+      stripDisabledConfigFileCliOption([
+        '--config-file',
+        'local.json',
+        '--port',
+        '3000',
+      ])
+    ).toEqual(['--port', '3000']);
+
+    expect(
+      stripDisabledConfigFileCliOption([
+        '--config-file',
+        '--port',
+        '3000',
+        '--config-file=',
+      ])
+    ).toEqual(['--port', '3000']);
   });
 
   it('loads JSON from relative paths without requiring a .json extension', () => {
