@@ -235,27 +235,22 @@ function coerceBooleanString(value) {
 	if (BOOLEAN_TRUE_VALUES.has(lower)) return true;
 	if (BOOLEAN_FALSE_VALUES.has(lower)) return false;
 }
-function isBooleanString(value) {
-	const lower = value.toLowerCase();
-	return BOOLEAN_TRUE_VALUES.has(lower) || BOOLEAN_FALSE_VALUES.has(lower);
-}
 function coerceCliBooleanValue(value) {
 	if (typeof value === "boolean") return false;
 	if (value === "") return true;
 	return coerceBooleanString(value);
 }
 function parseStringValueForField(value, type, enumValues) {
-	if (type === "boolean") return coerceBooleanString(value);
+	if (type === "boolean") return coerceBooleanString(value) ?? value;
 	if (type === "number") {
 		const numResult = z.coerce.number().safeParse(value);
 		if (numResult.success) return numResult.data;
-		if (isBooleanString(value)) return;
-		return;
+		return value;
 	}
 	if (type === "enum") {
 		const result = z.enum(enumValues).safeParse(value);
 		if (result.success) return result.data;
-		return;
+		return value;
 	}
 	return value;
 }

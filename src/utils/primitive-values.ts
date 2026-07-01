@@ -12,11 +12,6 @@ export function coerceBooleanString(value: string): boolean | undefined {
   return undefined;
 }
 
-export function isBooleanString(value: string): boolean {
-  const lower = value.toLowerCase();
-  return BOOLEAN_TRUE_VALUES.has(lower) || BOOLEAN_FALSE_VALUES.has(lower);
-}
-
 export function coerceCliBooleanValue(
   value: string | boolean
 ): boolean | undefined {
@@ -33,9 +28,9 @@ export function parseStringValueForField(
   value: string,
   type: FieldType,
   enumValues?: string[]
-): SourcePrimitive | undefined {
+): SourcePrimitive {
   if (type === 'boolean') {
-    return coerceBooleanString(value);
+    return coerceBooleanString(value) ?? value;
   }
 
   if (type === 'number') {
@@ -43,10 +38,7 @@ export function parseStringValueForField(
     if (numResult.success) {
       return numResult.data as number;
     }
-    if (isBooleanString(value)) {
-      return undefined;
-    }
-    return undefined;
+    return value;
   }
 
   if (type === 'enum') {
@@ -55,7 +47,7 @@ export function parseStringValueForField(
     if (result.success) {
       return result.data as string;
     }
-    return undefined;
+    return value;
   }
 
   return value;

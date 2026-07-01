@@ -277,6 +277,29 @@ describe('configure', () => {
     ).toThrow(/Configuration validation failed/);
   });
 
+  it('does not let invalid env file values fall back to schema defaults', () => {
+    writeFileSync(envPath, 'KONFUZ_TEST_PORT=not-a-number\n');
+
+    expect(() =>
+      configure(
+        {
+          konfuzTestPort: z.number().default(3000),
+        },
+        { envPath }
+      )
+    ).toThrow(/Configuration validation failed/);
+  });
+
+  it('does not let invalid process env values fall back to schema defaults', () => {
+    process.env.KONFUZ_TEST_ENABLED = 'not-a-boolean';
+
+    expect(() =>
+      configure({
+        konfuzTestEnabled: z.boolean().default(false),
+      })
+    ).toThrow(/Configuration validation failed/);
+  });
+
   it('handles complex schema with multiple types', () => {
     mockArgs(['--konfuz-test-port', '3000', '--konfuz-test-enable-cache']);
 
