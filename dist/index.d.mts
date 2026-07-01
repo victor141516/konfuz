@@ -37,6 +37,8 @@ interface FieldConfig<T extends ConfigFieldType = ConfigFieldType> {
   cmdNameShort?: string;
   /** Description shown next to this flag in `--help` output. */
   cmdDescription?: string;
+  /** Dot-notation path used to read this value from an opt-in JSON config file. */
+  configPath?: string;
   /**
    * Mark this field as sensitive. When `true`, its value is redacted
    * (shown as `***`) in error messages and log output.
@@ -61,12 +63,18 @@ declare function customConfigElement<T extends SupportedZodTypes>(options: {
   cmdName?: string;
   cmdNameShort?: string;
   cmdDescription?: string;
+  configPath?: string;
   secret?: boolean;
 }): FieldConfig<T>;
 /** Converts a camelCase key to UPPER_SNAKE_CASE (e.g. `databaseHost` → `DATABASE_HOST`). */
 declare function toEnvName(key: string): string;
 /** Converts a camelCase key to kebab-case (e.g. `databaseHost` → `database-host`). */
 declare function toCliName(key: string): string;
+//#endregion
+//#region src/config-file-loader.d.ts
+type ConfigFileOption = boolean | string | {
+  defaultPath: string;
+};
 //#endregion
 //#region src/print-config-sources.d.ts
 declare function printConfiguredSources(configResult: unknown): void;
@@ -75,10 +83,11 @@ declare function printConfiguredSources(configResult: unknown): void;
 interface ParseMyConfOptions {
   envPath?: string | string[];
   argv?: string[];
+  configFile?: ConfigFileOption;
 }
 type InferConfig<T extends ConfigInput> = { [K in keyof T]: T[K] extends z.ZodTypeAny ? z.infer<T[K]> : T[K] extends FieldConfig ? T[K]['type'] extends z.ZodTypeAny ? z.infer<T[K]['type']> : T[K]['type'] extends SimpleType ? SimpleToNative<T[K]['type']> : never : T[K] extends SimpleType ? SimpleToNative<T[K]> : never };
 type SimpleToNative<T extends SimpleType> = T extends 'string' ? string : T extends 'number' ? number : T extends 'boolean' ? boolean : never;
-type ConfigSource = 'cli' | 'env' | 'envFile' | 'default';
+type ConfigSource = 'cli' | 'env' | 'configFile' | 'envFile' | 'defaultConfigFile' | 'default';
 interface SourceValue {
   name: string;
   value: string;
@@ -86,7 +95,9 @@ interface SourceValue {
 interface ConfigSourceEntry {
   finalSource: ConfigSource;
   finalValue?: string;
+  defaultConfigFile?: SourceValue;
   envFile?: SourceValue;
+  configFile?: SourceValue;
   env?: SourceValue;
   cli?: SourceValue;
   secret?: boolean;

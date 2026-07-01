@@ -20,6 +20,7 @@ function customConfigElement(options) {
 		cmdName: options?.cmdName,
 		cmdNameShort: options?.cmdNameShort,
 		cmdDescription: options?.cmdDescription,
+		configPath: options?.configPath,
 		secret: options?.secret
 	};
 }
@@ -81,6 +82,16 @@ function isSimpleType(value) {
 function isFieldConfig(value) {
 	return typeof value === "object" && value !== null && "type" in value && (value.type instanceof z.ZodType || isSimpleType(value.type));
 }
+function validateConfigPath(configPath, fieldName) {
+	if (!configPath.startsWith(".")) throw new Error(`[konfuz] configPath for "${fieldName}" must start with ".".`);
+	const body = configPath.slice(1);
+	if (body === "") return;
+	const segments = body.split(".");
+	for (const [index, segment] of segments.entries()) {
+		const isTrailingEmptySegment = segment === "" && index === segments.length - 1;
+		if (segment === "" && !isTrailingEmptySegment) throw new Error(`[konfuz] configPath for "${fieldName}" must not contain empty middle segments.`);
+	}
+}
 /**
 * Analyses a user-provided config object (or `z.ZodObject`) and returns a
 * `SchemaDescriptor` containing per-field metadata and the raw Zod schemas.
@@ -95,6 +106,7 @@ function extractSchemaInfo(config) {
 		let customCmdName;
 		let customCmdNameShort;
 		let customCmdDescription;
+		let customConfigPath;
 		let secret;
 		if (isFieldConfig(value)) {
 			schema = isSimpleType(value.type) ? simpleTypeToZod(value.type) : value.type;
@@ -102,17 +114,20 @@ function extractSchemaInfo(config) {
 			customCmdName = value.cmdName;
 			customCmdNameShort = value.cmdNameShort;
 			customCmdDescription = value.cmdDescription;
+			customConfigPath = value.configPath;
 			secret = value.secret;
 		} else if (isSimpleType(value)) schema = simpleTypeToZod(value);
 		else schema = value;
 		zodSchemas[key] = schema;
 		const { type, enumValues } = inferFieldType(schema);
+		if (customConfigPath !== void 0) validateConfigPath(customConfigPath, key);
 		fields.push({
 			name: key,
 			envName: customEnvName ?? toEnvName(key),
 			cmdName: customCmdName ?? toCliName(key),
 			cmdNameShort: customCmdNameShort,
 			cmdDescription: customCmdDescription,
+			configPath: customConfigPath,
 			type,
 			isOptional: isFieldOptional(schema),
 			defaultValue: extractDefaultValue(schema),
@@ -235,11 +250,20 @@ function coerceBooleanValue(value) {
 }
 function parseCliArguments(info, options) {
 	const argv = options?.argv ?? hideBin(process.argv);
+	const includeDefaults = options?.includeDefaults ?? true;
 	const config = {};
 	const rawValues = {};
+	const sourceValues = {};
 	globalGenerator.reset();
 	if (argv.length === 0) {
-		for (const field of info.fields) if (field.defaultValue !== void 0) config[field.name] = field.defaultValue;
+		if (includeDefaults) {
+			for (const field of info.fields) if (field.defaultValue !== void 0) config[field.name] = field.defaultValue;
+		}
+		if (options?.includeMetadata) return {
+			config,
+			rawValues,
+			sourceValues
+		};
 		return config;
 	}
 	let y = yargs(argv);
@@ -261,28 +285,38 @@ function parseCliArguments(info, options) {
 		const value = parsed[field.cmdName];
 		if (value !== void 0) if (field.type === "boolean") {
 			const coerced = coerceBooleanValue(value);
-			if (coerced !== void 0) config[field.name] = coerced;
-			else rawValues[field.name] = value;
-		} else config[field.name] = value;
-		else if (field.defaultValue !== void 0) config[field.name] = field.defaultValue;
+			if (coerced !== void 0) {
+				config[field.name] = coerced;
+				sourceValues[field.name] = String(coerced);
+			} else rawValues[field.name] = String(value);
+		} else {
+			config[field.name] = value;
+			sourceValues[field.name] = String(value);
+		}
+		else if (includeDefaults && field.defaultValue !== void 0) config[field.name] = field.defaultValue;
 	}
-	if (Object.keys(rawValues).length > 0) return {
+	if (options?.includeMetadata || Object.keys(rawValues).length > 0) return {
 		config,
-		rawValues
+		rawValues,
+		sourceValues
 	};
 	return config;
 }
 //#endregion
 //#region src/env-parser.ts
-function parseEnvVariables(info, envFileConfig) {
+function parseProcessEnvVariables(info) {
 	const config = {};
 	for (const field of info.fields) {
 		const envValue = process.env[field.envName];
 		if (envValue !== void 0) config[field.name] = parseWithZod(envValue, field.type, field.enumValues);
 	}
+	return config;
+}
+function parseEnvFileVariables(info, envFileConfig) {
+	const config = {};
 	for (const [key, value] of Object.entries(envFileConfig)) {
 		const field = info.fields.find((f) => f.envName === key);
-		if (field && value !== void 0 && config[field.name] === void 0) config[field.name] = parseWithZod(value, field.type, field.enumValues);
+		if (field && value !== void 0) config[field.name] = parseWithZod(value, field.type, field.enumValues);
 	}
 	return config;
 }
@@ -321,6 +355,148 @@ function parseWithZod(value, type, enumValues) {
 	return value;
 }
 //#endregion
+//#region src/config-file-loader.ts
+const CONFIG_FILE_FLAG = "--config-file";
+const CONFIG_FILE_MISSING_PATH_ERROR = "[konfuz] --config-file requires a JSON file path.";
+function isNodeError(error) {
+	return error instanceof Error;
+}
+function assertNonEmptyPath(path, optionName) {
+	if (path === "") throw new Error(`[konfuz] ${optionName} must not be an empty string.`);
+}
+function normalizeConfigFileOption(option) {
+	if (option === void 0 || option === false) return { enabled: false };
+	if (option === true) return { enabled: true };
+	if (typeof option === "string") {
+		assertNonEmptyPath(option, "options.configFile");
+		return {
+			enabled: true,
+			defaultPath: option
+		};
+	}
+	assertNonEmptyPath(option.defaultPath, "options.configFile.defaultPath");
+	return {
+		enabled: true,
+		defaultPath: option.defaultPath
+	};
+}
+function parseConfigFileCliOption(argv) {
+	const strippedArgv = [];
+	let explicitPath;
+	for (let index = 0; index < argv.length; index += 1) {
+		const arg = argv[index];
+		if (arg === CONFIG_FILE_FLAG) {
+			const value = argv[index + 1];
+			if (value === void 0 || value === "" || value.startsWith("-")) throw new Error(CONFIG_FILE_MISSING_PATH_ERROR);
+			explicitPath = value;
+			index += 1;
+			continue;
+		}
+		if (arg.startsWith(`${CONFIG_FILE_FLAG}=`)) {
+			const value = arg.slice(14);
+			if (value === "") throw new Error(CONFIG_FILE_MISSING_PATH_ERROR);
+			explicitPath = value;
+			continue;
+		}
+		strippedArgv.push(arg);
+	}
+	return {
+		argv: strippedArgv,
+		explicitPath
+	};
+}
+function loadConfigFile(path, options) {
+	const resolvedPath = resolve(process.cwd(), path);
+	let content;
+	try {
+		content = readFileSync(resolvedPath, "utf-8");
+	} catch (error) {
+		if (isNodeError(error) && error.code === "ENOENT" && !options.required) return;
+		if (isNodeError(error) && error.code === "ENOENT") throw new Error(`[konfuz] JSON config file not found: ${path}`);
+		const reason = error instanceof Error ? error.message : String(error);
+		throw new Error(`[konfuz] Could not read JSON config file "${path}": ${reason}`);
+	}
+	let data;
+	try {
+		data = JSON.parse(content);
+	} catch (error) {
+		const reason = error instanceof Error ? error.message : String(error);
+		throw new Error(`[konfuz] Failed to parse JSON config file "${path}": ${reason}`);
+	}
+	if (typeof data !== "object" || data === null || Array.isArray(data)) throw new Error(`[konfuz] JSON config file "${path}" must contain a JSON object at the root.`);
+	return {
+		path,
+		resolvedPath,
+		data
+	};
+}
+//#endregion
+//#region src/config-file-parser.ts
+function isJsonObject(value) {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function hasOwn$1(object, key) {
+	return Object.prototype.hasOwnProperty.call(object, key);
+}
+function serializeJsonValue(value) {
+	const serialized = JSON.stringify(value);
+	return serialized === void 0 ? String(value) : serialized;
+}
+function resolveConfigLookupPath(field) {
+	const rawPath = field.configPath;
+	if (rawPath === void 0 || rawPath === ".") return {
+		segments: [field.name],
+		displayPath: `.${field.name}`
+	};
+	const segments = rawPath.slice(1).split(".");
+	if (segments[segments.length - 1] === "") {
+		segments.pop();
+		segments.push(field.name);
+	}
+	return {
+		segments,
+		displayPath: `.${segments.join(".")}`
+	};
+}
+function warnNonObjectIntermediate(file, field, lookupPath, traversedPath) {
+	console.warn(`[konfuz] Found non-object value at "${traversedPath}" while looking for "${lookupPath}" in configuration file "${file.path}". Treating "${field.name}" as missing from that file.`);
+}
+function readPath(file, field, segments, displayPath) {
+	let current = file.data;
+	const traversedSegments = [];
+	for (const segment of segments) {
+		if (!isJsonObject(current)) {
+			warnNonObjectIntermediate(file, field, displayPath, `.${traversedSegments.join(".")}`);
+			return { found: false };
+		}
+		if (!hasOwn$1(current, segment)) return { found: false };
+		current = current[segment];
+		traversedSegments.push(segment);
+	}
+	return {
+		found: true,
+		value: current
+	};
+}
+function parseConfigFileValues(info, file) {
+	const config = {};
+	const sourceValues = {};
+	for (const field of info.fields) {
+		const { segments, displayPath } = resolveConfigLookupPath(field);
+		const result = readPath(file, field, segments, displayPath);
+		if (!result.found) continue;
+		config[field.name] = result.value;
+		sourceValues[field.name] = {
+			name: `${file.path}:${displayPath}`,
+			value: serializeJsonValue(result.value)
+		};
+	}
+	return {
+		config,
+		sourceValues
+	};
+}
+//#endregion
 //#region src/print-config-sources.ts
 const STYLES = {
 	bold: (text) => `\x1b[1m${text}\x1b[0m`,
@@ -328,6 +504,7 @@ const STYLES = {
 	green: (text) => `\x1b[32m${text}\x1b[0m`,
 	yellow: (text) => `\x1b[33m${text}\x1b[0m`,
 	blue: (text) => `\x1b[34m${text}\x1b[0m`,
+	magenta: (text) => `\x1b[35m${text}\x1b[0m`,
 	gray: (text) => `\x1b[90m${text}\x1b[0m`
 };
 const MASK = "***";
@@ -347,7 +524,9 @@ function getFinalValueStyle(value, source, isSecret) {
 	switch (source) {
 		case "cli": return STYLES.green(displayValue);
 		case "env": return STYLES.yellow(displayValue);
+		case "configFile": return STYLES.magenta(displayValue);
 		case "envFile": return STYLES.blue(displayValue);
+		case "defaultConfigFile": return STYLES.dim(displayValue);
 		default: return STYLES.dim(displayValue);
 	}
 }
@@ -359,7 +538,9 @@ function printConfiguredSources(configResult) {
 	const fieldNames = Object.keys(configResult).filter((k) => !k.startsWith("__"));
 	const tableData = [[
 		STYLES.bold("Field"),
+		STYLES.bold("Default JSON"),
 		STYLES.bold(".env file"),
+		STYLES.bold("JSON file"),
 		STYLES.bold("Environment"),
 		STYLES.bold("CLI"),
 		STYLES.bold("Final value")
@@ -372,19 +553,23 @@ function printConfiguredSources(configResult) {
 				"-",
 				"-",
 				"-",
+				"-",
+				"-",
 				"-"
 			]);
 			continue;
 		}
 		tableData.push([
 			name,
+			getCellStyle(entry.defaultConfigFile, entry.finalSource === "defaultConfigFile", entry.secret),
 			getCellStyle(entry.envFile, entry.finalSource === "envFile", entry.secret),
+			getCellStyle(entry.configFile, entry.finalSource === "configFile", entry.secret),
 			getCellStyle(entry.env, entry.finalSource === "env", entry.secret),
 			getCellStyle(entry.cli, entry.finalSource === "cli", entry.secret),
 			getFinalValueStyle(entry.finalValue, entry.finalSource, entry.secret)
 		]);
 	}
-	console.log("[konfuz] Configuration sources (priority: CLI > Environment > .env file > default)\n");
+	console.log("[konfuz] Configuration sources (priority: CLI > Environment > JSON file > .env file > Default JSON > default)\n");
 	console.log(table.table(tableData, { columns: {
 		0: {
 			width: 20,
@@ -403,6 +588,14 @@ function printConfiguredSources(configResult) {
 			truncate: 30
 		},
 		4: {
+			width: 30,
+			truncate: 30
+		},
+		5: {
+			width: 30,
+			truncate: 30
+		},
+		6: {
 			width: 20,
 			truncate: 20
 		}
@@ -410,53 +603,96 @@ function printConfiguredSources(configResult) {
 }
 //#endregion
 //#region src/index.ts
+function emptyConfigFileParseResult() {
+	return {
+		config: {},
+		sourceValues: {}
+	};
+}
+function hasOwn(object, key) {
+	return Object.prototype.hasOwnProperty.call(object, key);
+}
+function getCliSourceName(cmdName) {
+	return cmdName.startsWith("--") ? cmdName : `--${cmdName}`;
+}
 function configure(config, options) {
 	const info = extractSchemaInfo(config);
 	const schema = normalizeToZodObject(config);
 	const defaults = extractDefaults(schema.shape);
+	const rawArgv = options?.argv ?? hideBin(process.argv);
+	const configFileOption = normalizeConfigFileOption(options?.configFile);
+	let argv = rawArgv;
+	let defaultConfigFileResult = emptyConfigFileParseResult();
+	let configFileResult = emptyConfigFileParseResult();
+	if (configFileOption.enabled) {
+		const parsedConfigFileCli = parseConfigFileCliOption(rawArgv);
+		argv = parsedConfigFileCli.argv;
+		if (parsedConfigFileCli.explicitPath !== void 0) {
+			const explicitConfigFile = loadConfigFile(parsedConfigFileCli.explicitPath, { required: true });
+			if (explicitConfigFile) configFileResult = parseConfigFileValues(info, explicitConfigFile);
+		} else if (configFileOption.defaultPath !== void 0) {
+			const defaultConfigFile = loadConfigFile(configFileOption.defaultPath, { required: false });
+			if (defaultConfigFile) defaultConfigFileResult = parseConfigFileValues(info, defaultConfigFile);
+		}
+	}
 	const envFileConfig = options?.envPath ? loadEnvFile(options.envPath) : loadEnvFile();
-	const envConfig = parseEnvVariables(info, envFileConfig);
-	const cliResult = parseCliArguments(info, { argv: options?.argv });
-	const cliConfig = cliResult.config ?? cliResult;
-	const cliArgsProvided = (options?.argv ?? hideBin(process.argv)).length > 0;
+	const envFileConfigValues = parseEnvFileVariables(info, envFileConfig);
+	const envConfigValues = parseProcessEnvVariables(info);
+	const cliResult = parseCliArguments(info, {
+		argv,
+		includeMetadata: true,
+		includeDefaults: false
+	});
 	const sources = {};
 	const merged = {
 		...defaults,
-		...envConfig,
-		...cliConfig
+		...defaultConfigFileResult.config,
+		...envFileConfigValues,
+		...configFileResult.config,
+		...envConfigValues,
+		...cliResult.config
 	};
 	for (const field of info.fields) {
 		const name = field.name;
-		const cliValue = cliConfig[name];
 		const envValue = process.env[field.envName];
 		const envFileValue = envFileConfig[field.envName];
-		const cliWasProvided = cliArgsProvided && cliValue !== void 0;
+		const defaultConfigFileValue = defaultConfigFileResult.sourceValues[name];
+		const configFileValue = configFileResult.sourceValues[name];
+		const cliValue = cliResult.sourceValues[name];
 		const entry = {
 			finalSource: "default",
+			defaultConfigFile: defaultConfigFileValue,
 			envFile: envFileValue !== void 0 ? {
 				name: field.envName,
 				value: envFileValue
 			} : void 0,
+			configFile: configFileValue,
 			env: envValue !== void 0 ? {
 				name: field.envName,
 				value: envValue
 			} : void 0,
-			cli: cliWasProvided ? {
-				name: `--${field.cmdName}`,
-				value: String(cliValue)
+			cli: cliValue !== void 0 ? {
+				name: getCliSourceName(field.cmdName),
+				value: cliValue
 			} : void 0,
 			secret: field.secret
 		};
-		if (cliWasProvided) {
+		if (entry.cli) {
 			entry.finalSource = "cli";
-			entry.finalValue = String(cliValue);
+			entry.finalValue = entry.cli.value;
 		} else if (envValue !== void 0) {
 			entry.finalSource = "env";
 			entry.finalValue = envValue;
+		} else if (configFileValue !== void 0) {
+			entry.finalSource = "configFile";
+			entry.finalValue = configFileValue.value;
 		} else if (envFileValue !== void 0) {
 			entry.finalSource = "envFile";
 			entry.finalValue = envFileValue;
-		} else if (name in merged) entry.finalValue = String(merged[name]);
+		} else if (defaultConfigFileValue !== void 0) {
+			entry.finalSource = "defaultConfigFile";
+			entry.finalValue = defaultConfigFileValue.value;
+		} else if (hasOwn(merged, name) && merged[name] !== void 0) entry.finalValue = String(merged[name]);
 		sources[name] = entry;
 	}
 	const result = schema.safeParse(merged);

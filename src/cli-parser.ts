@@ -10,6 +10,7 @@ export interface CliConfig {
 export interface CliParseResult {
   config: CliConfig;
   rawValues: Record<string, string>;
+  sourceValues: Record<string, string>;
 }
 
 const BOOLEAN_TRUE_VALUES = new Set(['1', 'true', 'yes']);
@@ -30,19 +31,30 @@ function coerceBooleanValue(value: string | boolean): boolean | undefined {
 
 export function parseCliArguments(
   info: SchemaDescriptor,
-  options?: { argv?: string[] }
+  options?: {
+    argv?: string[];
+    includeMetadata?: boolean;
+    includeDefaults?: boolean;
+  }
 ): CliConfig | CliParseResult {
   const argv = options?.argv ?? hideBin(process.argv);
+  const includeDefaults = options?.includeDefaults ?? true;
   const config: CliConfig = {};
   const rawValues: Record<string, string> = {};
+  const sourceValues: Record<string, string> = {};
 
   globalGenerator.reset();
 
   if (argv.length === 0) {
-    for (const field of info.fields) {
-      if (field.defaultValue !== undefined) {
-        config[field.name] = field.defaultValue as string | number | boolean;
+    if (includeDefaults) {
+      for (const field of info.fields) {
+        if (field.defaultValue !== undefined) {
+          config[field.name] = field.defaultValue as string | number | boolean;
+        }
       }
+    }
+    if (options?.includeMetadata) {
+      return { config, rawValues, sourceValues };
     }
     return config;
   }
@@ -87,19 +99,21 @@ export function parseCliArguments(
         const coerced = coerceBooleanValue(value);
         if (coerced !== undefined) {
           config[field.name] = coerced;
+          sourceValues[field.name] = String(coerced);
         } else {
-          rawValues[field.name] = value;
+          rawValues[field.name] = String(value);
         }
       } else {
         config[field.name] = value as string | number | boolean;
+        sourceValues[field.name] = String(value);
       }
-    } else if (field.defaultValue !== undefined) {
+    } else if (includeDefaults && field.defaultValue !== undefined) {
       config[field.name] = field.defaultValue as string | number | boolean;
     }
   }
 
-  if (Object.keys(rawValues).length > 0) {
-    return { config, rawValues };
+  if (options?.includeMetadata || Object.keys(rawValues).length > 0) {
+    return { config, rawValues, sourceValues };
   }
   return config;
 }

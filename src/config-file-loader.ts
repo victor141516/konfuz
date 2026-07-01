@@ -1,0 +1,136 @@
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
+
+export type ConfigFileOption =
+  | boolean
+  | string
+  | {
+      defaultPath: string;
+    };
+
+export interface NormalizedConfigFileOption {
+  enabled: boolean;
+  defaultPath?: string;
+}
+
+export interface ConfigFileCliParseResult {
+  argv: string[];
+  explicitPath?: string;
+}
+
+export interface LoadedConfigFile {
+  path: string;
+  resolvedPath: string;
+  data: Record<string, unknown>;
+}
+
+const CONFIG_FILE_FLAG = '--config-file';
+const CONFIG_FILE_MISSING_PATH_ERROR =
+  '[konfuz] --config-file requires a JSON file path.';
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error;
+}
+
+function assertNonEmptyPath(path: string, optionName: string): void {
+  if (path === '') {
+    throw new Error(`[konfuz] ${optionName} must not be an empty string.`);
+  }
+}
+
+export function normalizeConfigFileOption(
+  option: ConfigFileOption | undefined
+): NormalizedConfigFileOption {
+  if (option === undefined || option === false) {
+    return { enabled: false };
+  }
+
+  if (option === true) {
+    return { enabled: true };
+  }
+
+  if (typeof option === 'string') {
+    assertNonEmptyPath(option, 'options.configFile');
+    return { enabled: true, defaultPath: option };
+  }
+
+  assertNonEmptyPath(option.defaultPath, 'options.configFile.defaultPath');
+  return { enabled: true, defaultPath: option.defaultPath };
+}
+
+export function parseConfigFileCliOption(
+  argv: string[]
+): ConfigFileCliParseResult {
+  const strippedArgv: string[] = [];
+  let explicitPath: string | undefined;
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+
+    if (arg === CONFIG_FILE_FLAG) {
+      const value = argv[index + 1];
+      if (value === undefined || value === '' || value.startsWith('-')) {
+        throw new Error(CONFIG_FILE_MISSING_PATH_ERROR);
+      }
+      explicitPath = value;
+      index += 1;
+      continue;
+    }
+
+    if (arg.startsWith(`${CONFIG_FILE_FLAG}=`)) {
+      const value = arg.slice(CONFIG_FILE_FLAG.length + 1);
+      if (value === '') {
+        throw new Error(CONFIG_FILE_MISSING_PATH_ERROR);
+      }
+      explicitPath = value;
+      continue;
+    }
+
+    strippedArgv.push(arg);
+  }
+
+  return { argv: strippedArgv, explicitPath };
+}
+
+export function loadConfigFile(
+  path: string,
+  options: { required: boolean }
+): LoadedConfigFile | undefined {
+  const resolvedPath = resolve(process.cwd(), path);
+  let content: string;
+
+  try {
+    content = readFileSync(resolvedPath, 'utf-8');
+  } catch (error) {
+    if (isNodeError(error) && error.code === 'ENOENT' && !options.required) {
+      return undefined;
+    }
+
+    if (isNodeError(error) && error.code === 'ENOENT') {
+      throw new Error(`[konfuz] JSON config file not found: ${path}`);
+    }
+
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `[konfuz] Could not read JSON config file "${path}": ${reason}`
+    );
+  }
+
+  let data: unknown;
+  try {
+    data = JSON.parse(content);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `[konfuz] Failed to parse JSON config file "${path}": ${reason}`
+    );
+  }
+
+  if (typeof data !== 'object' || data === null || Array.isArray(data)) {
+    throw new Error(
+      `[konfuz] JSON config file "${path}" must contain a JSON object at the root.`
+    );
+  }
+
+  return { path, resolvedPath, data: data as Record<string, unknown> };
+}

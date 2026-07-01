@@ -11,17 +11,24 @@ import {
   type ConfigFieldType,
 } from './schema-transformer';
 import { loadEnvFile, type EnvFileConfig } from './loader';
+import { parseCliArguments, type CliParseResult } from './cli-parser';
+import { parseEnvFileVariables, parseProcessEnvVariables } from './env-parser';
 import {
-  parseCliArguments,
-  type CliConfig,
-  type CliParseResult,
-} from './cli-parser';
-import { parseEnvVariables, type EnvConfig } from './env-parser';
+  loadConfigFile,
+  normalizeConfigFileOption,
+  parseConfigFileCliOption,
+  type ConfigFileOption,
+} from './config-file-loader';
+import {
+  parseConfigFileValues,
+  type ConfigFileParseResult,
+} from './config-file-parser';
 import { InternalSources } from './print-config-sources';
 
 export interface ParseMyConfOptions {
   envPath?: string | string[];
   argv?: string[];
+  configFile?: ConfigFileOption;
 }
 
 export { customConfigElement };
@@ -49,7 +56,13 @@ type SimpleToNative<T extends SimpleType> = T extends 'string'
       ? boolean
       : never;
 
-export type ConfigSource = 'cli' | 'env' | 'envFile' | 'default';
+export type ConfigSource =
+  | 'cli'
+  | 'env'
+  | 'configFile'
+  | 'envFile'
+  | 'defaultConfigFile'
+  | 'default';
 
 export interface SourceValue {
   name: string;
@@ -59,10 +72,24 @@ export interface SourceValue {
 export interface ConfigSourceEntry {
   finalSource: ConfigSource;
   finalValue?: string;
+  defaultConfigFile?: SourceValue;
   envFile?: SourceValue;
+  configFile?: SourceValue;
   env?: SourceValue;
   cli?: SourceValue;
   secret?: boolean;
+}
+
+function emptyConfigFileParseResult(): ConfigFileParseResult {
+  return { config: {}, sourceValues: {} };
+}
+
+function hasOwn(object: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(object, key);
+}
+
+function getCliSourceName(cmdName: string): string {
+  return cmdName.startsWith('--') ? cmdName : `--${cmdName}`;
 }
 
 export function configure<T extends ConfigInput>(
@@ -76,63 +103,106 @@ export function configure<T extends ConfigInput>(
 
   const defaults = extractDefaults(schema.shape);
 
+  const rawArgv = options?.argv ?? hideBin(process.argv);
+  const configFileOption = normalizeConfigFileOption(options?.configFile);
+  let argv = rawArgv;
+  let defaultConfigFileResult = emptyConfigFileParseResult();
+  let configFileResult = emptyConfigFileParseResult();
+
+  if (configFileOption.enabled) {
+    const parsedConfigFileCli = parseConfigFileCliOption(rawArgv);
+    argv = parsedConfigFileCli.argv;
+
+    if (parsedConfigFileCli.explicitPath !== undefined) {
+      const explicitConfigFile = loadConfigFile(
+        parsedConfigFileCli.explicitPath,
+        {
+          required: true,
+        }
+      );
+      if (explicitConfigFile) {
+        configFileResult = parseConfigFileValues(info, explicitConfigFile);
+      }
+    } else if (configFileOption.defaultPath !== undefined) {
+      const defaultConfigFile = loadConfigFile(configFileOption.defaultPath, {
+        required: false,
+      });
+      if (defaultConfigFile) {
+        defaultConfigFileResult = parseConfigFileValues(
+          info,
+          defaultConfigFile
+        );
+      }
+    }
+  }
+
   const envFileConfig: EnvFileConfig = options?.envPath
     ? loadEnvFile(options.envPath)
     : loadEnvFile();
 
-  const envConfig: EnvConfig = parseEnvVariables(info, envFileConfig);
+  const envFileConfigValues = parseEnvFileVariables(info, envFileConfig);
+  const envConfigValues = parseProcessEnvVariables(info);
 
-  const cliResult: CliConfig | CliParseResult = parseCliArguments(info, {
-    argv: options?.argv,
-  });
-
-  const cliConfig: CliConfig =
-    (cliResult as CliParseResult).config ?? (cliResult as CliConfig);
-
-  const cliArgsProvided = (options?.argv ?? hideBin(process.argv)).length > 0;
+  const cliResult = parseCliArguments(info, {
+    argv,
+    includeMetadata: true,
+    includeDefaults: false,
+  }) as CliParseResult;
 
   const sources: Record<string, ConfigSourceEntry> = {};
 
   const merged: Record<string, unknown> = {
     ...defaults,
-    ...envConfig,
-    ...cliConfig,
+    ...defaultConfigFileResult.config,
+    ...envFileConfigValues,
+    ...configFileResult.config,
+    ...envConfigValues,
+    ...cliResult.config,
   };
 
   for (const field of info.fields) {
     const name = field.name;
-    const cliValue = cliConfig[name];
     const envValue = process.env[field.envName];
     const envFileValue = envFileConfig[field.envName];
-
-    const cliWasProvided = cliArgsProvided && cliValue !== undefined;
+    const defaultConfigFileValue = defaultConfigFileResult.sourceValues[name];
+    const configFileValue = configFileResult.sourceValues[name];
+    const cliValue = cliResult.sourceValues[name];
 
     const entry: ConfigSourceEntry = {
       finalSource: 'default',
+      defaultConfigFile: defaultConfigFileValue,
       envFile:
         envFileValue !== undefined
           ? { name: field.envName, value: envFileValue }
           : undefined,
+      configFile: configFileValue,
       env:
         envValue !== undefined
           ? { name: field.envName, value: envValue }
           : undefined,
-      cli: cliWasProvided
-        ? { name: `--${field.cmdName}`, value: String(cliValue) }
-        : undefined,
+      cli:
+        cliValue !== undefined
+          ? { name: getCliSourceName(field.cmdName), value: cliValue }
+          : undefined,
       secret: field.secret,
     };
 
-    if (cliWasProvided) {
+    if (entry.cli) {
       entry.finalSource = 'cli';
-      entry.finalValue = String(cliValue);
+      entry.finalValue = entry.cli.value;
     } else if (envValue !== undefined) {
       entry.finalSource = 'env';
       entry.finalValue = envValue;
+    } else if (configFileValue !== undefined) {
+      entry.finalSource = 'configFile';
+      entry.finalValue = configFileValue.value;
     } else if (envFileValue !== undefined) {
       entry.finalSource = 'envFile';
       entry.finalValue = envFileValue;
-    } else if (name in merged) {
+    } else if (defaultConfigFileValue !== undefined) {
+      entry.finalSource = 'defaultConfigFile';
+      entry.finalValue = defaultConfigFileValue.value;
+    } else if (hasOwn(merged, name) && merged[name] !== undefined) {
       entry.finalValue = String(merged[name]);
     }
 

@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { configure, customConfigElement } from '../src/index';
+import {
+  configure,
+  customConfigElement,
+  printConfiguredSources,
+} from '../src/index';
 import { z } from 'zod';
 import { writeFileSync, unlinkSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
@@ -7,6 +11,14 @@ import { join } from 'path';
 describe('configure', () => {
   const testDir = join(process.cwd(), '.temp');
   const envPath = join(testDir, '.env');
+  const jsonPaths = [
+    'disabled.json',
+    'default.json',
+    'explicit.json',
+    'native.json',
+    'secret.json',
+    'string-port.json',
+  ].map((fileName) => join(testDir, fileName));
 
   const originalArgv = process.argv;
   const originalEnv = process.env;
@@ -24,9 +36,15 @@ describe('configure', () => {
     if (existsSync(envPath)) {
       unlinkSync(envPath);
     }
+    for (const jsonPath of jsonPaths) {
+      if (existsSync(jsonPath)) {
+        unlinkSync(jsonPath);
+      }
+    }
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     process.env = originalEnv;
     Object.defineProperty(process, 'argv', {
       value: originalArgv,
@@ -433,6 +451,301 @@ describe('configure', () => {
     expect(sources!.konfuzTestPort.cli).toBeDefined();
     expect(sources!.konfuzTestPort.finalSource).toBe('cli');
     expect(sources!.konfuzTestPort.finalValue).toBe('3000');
+  });
+
+  describe('JSON config files', () => {
+    it('does not load JSON when configFile is disabled and treats --config-file as inert', () => {
+      const disabledPath = join(testDir, 'disabled.json');
+      writeFileSync(disabledPath, '{"konfuzTestPort":9000}');
+
+      const config = configure(
+        {
+          konfuzTestPort: z.number().default(3000),
+        },
+        { argv: ['--config-file', disabledPath] }
+      );
+
+      expect(config.konfuzTestPort).toBe(3000);
+      const sources = (config as { __$sources__?: Record<string, any> })
+        .__$sources__;
+      expect(sources!.konfuzTestPort.finalSource).toBe('default');
+      expect(sources!.konfuzTestPort.cli).toBeUndefined();
+      expect(sources!.konfuzTestPort.configFile).toBeUndefined();
+    });
+
+    it('enables JSON support without requiring a file when configFile is true', () => {
+      const config = configure(
+        {
+          konfuzTestPort: z.number().default(3000),
+        },
+        { configFile: true, argv: [] }
+      );
+
+      expect(config.konfuzTestPort).toBe(3000);
+    });
+
+    it('loads an explicit JSON file from --config-file and strips the meta option before field CLI parsing', () => {
+      const explicitPath = join(testDir, 'explicit.json');
+      writeFileSync(
+        explicitPath,
+        JSON.stringify({ konfuzTestPort: 5000, konfuzTestHost: 'json-host' })
+      );
+
+      const config = configure(
+        {
+          konfuzTestPort: z.number().default(3000),
+          konfuzTestHost: z.string(),
+        },
+        {
+          configFile: true,
+          argv: ['--config-file', explicitPath],
+        }
+      );
+
+      expect(config.konfuzTestPort).toBe(5000);
+      expect(config.konfuzTestHost).toBe('json-host');
+
+      const sources = (config as { __$sources__?: Record<string, any> })
+        .__$sources__;
+      expect(sources!.konfuzTestPort.finalSource).toBe('configFile');
+      expect(sources!.konfuzTestPort.configFile).toEqual({
+        name: `${explicitPath}:.konfuzTestPort`,
+        value: '5000',
+      });
+      expect(sources!.konfuzTestPort.cli).toBeUndefined();
+    });
+
+    it('loads a configured default JSON file at lower priority than .env files', () => {
+      const defaultPath = join(testDir, 'default.json');
+      writeFileSync(
+        defaultPath,
+        JSON.stringify({
+          konfuzTestPort: 1000,
+          konfuzTestHost: 'default-json-host',
+        })
+      );
+      writeFileSync(envPath, 'KONFUZ_TEST_PORT=2000\n');
+
+      const config = configure(
+        {
+          konfuzTestPort: z.number(),
+          konfuzTestHost: z.string(),
+        },
+        { configFile: defaultPath, envPath, argv: [] }
+      );
+
+      expect(config.konfuzTestPort).toBe(2000);
+      expect(config.konfuzTestHost).toBe('default-json-host');
+
+      const sources = (config as { __$sources__?: Record<string, any> })
+        .__$sources__;
+      expect(sources!.konfuzTestPort.finalSource).toBe('envFile');
+      expect(sources!.konfuzTestHost.finalSource).toBe('defaultConfigFile');
+    });
+
+    it('uses explicit JSON instead of layering it on top of configured default JSON', () => {
+      const defaultPath = join(testDir, 'default.json');
+      const explicitPath = join(testDir, 'explicit.json');
+      writeFileSync(
+        defaultPath,
+        JSON.stringify({ konfuzTestPort: 1000, konfuzTestHost: 'default' })
+      );
+      writeFileSync(
+        explicitPath,
+        JSON.stringify({ konfuzTestHost: 'explicit' })
+      );
+
+      const config = configure(
+        {
+          konfuzTestPort: z.number().default(3000),
+          konfuzTestHost: z.string(),
+        },
+        {
+          configFile: { defaultPath },
+          argv: ['--config-file', explicitPath],
+        }
+      );
+
+      expect(config.konfuzTestPort).toBe(3000);
+      expect(config.konfuzTestHost).toBe('explicit');
+
+      const sources = (config as { __$sources__?: Record<string, any> })
+        .__$sources__;
+      expect(sources!.konfuzTestPort.defaultConfigFile).toBeUndefined();
+      expect(sources!.konfuzTestHost.finalSource).toBe('configFile');
+    });
+
+    it('applies the full priority order across default JSON, .env, explicit JSON, env, and CLI', () => {
+      const defaultPath = join(testDir, 'default.json');
+      const explicitPath = join(testDir, 'explicit.json');
+      writeFileSync(
+        defaultPath,
+        JSON.stringify({
+          konfuzTestPort: 1000,
+          konfuzTestHost: 'default-host',
+          konfuzTestDebug: false,
+        })
+      );
+      writeFileSync(
+        envPath,
+        'KONFUZ_TEST_PORT=2000\nKONFUZ_TEST_HOST=env-file-host\n'
+      );
+      writeFileSync(
+        explicitPath,
+        JSON.stringify({
+          konfuzTestPort: 3000,
+          konfuzTestHost: 'explicit-host',
+          konfuzTestDebug: true,
+        })
+      );
+      process.env.KONFUZ_TEST_HOST = 'env-host';
+
+      const config = configure(
+        {
+          konfuzTestPort: z.number(),
+          konfuzTestHost: z.string(),
+          konfuzTestDebug: z.boolean(),
+        },
+        {
+          configFile: defaultPath,
+          envPath,
+          argv: ['--config-file', explicitPath, '--konfuz-test-port', '5000'],
+        }
+      );
+
+      expect(config.konfuzTestPort).toBe(5000);
+      expect(config.konfuzTestHost).toBe('env-host');
+      expect(config.konfuzTestDebug).toBe(true);
+
+      const sources = (config as { __$sources__?: Record<string, any> })
+        .__$sources__;
+      expect(sources!.konfuzTestPort.finalSource).toBe('cli');
+      expect(sources!.konfuzTestHost.finalSource).toBe('env');
+      expect(sources!.konfuzTestDebug.finalSource).toBe('configFile');
+    });
+
+    it('supports nested configPath lookup and native JSON value validation', () => {
+      const nativePath = join(testDir, 'native.json');
+      writeFileSync(
+        nativePath,
+        JSON.stringify({
+          server: {
+            port: 3000,
+            enabled: true,
+          },
+        })
+      );
+
+      const config = configure(
+        {
+          konfuzTestPort: customConfigElement({
+            type: z.number(),
+            configPath: '.server.port',
+          }),
+          enabled: customConfigElement({
+            type: z.boolean(),
+            configPath: '.server.',
+          }),
+        },
+        {
+          configFile: true,
+          argv: [`--config-file=${nativePath}`],
+        }
+      );
+
+      expect(config.konfuzTestPort).toBe(3000);
+      expect(config.enabled).toBe(true);
+    });
+
+    it('does not coerce JSON string values for number schemas', () => {
+      const stringPortPath = join(testDir, 'string-port.json');
+      writeFileSync(stringPortPath, '{"konfuzTestPort":"3000"}');
+
+      expect(() =>
+        configure(
+          {
+            konfuzTestPort: z.number(),
+          },
+          {
+            configFile: true,
+            argv: ['--config-file', stringPortPath],
+          }
+        )
+      ).toThrow(/Configuration validation failed/);
+    });
+
+    it('throws for empty and missing explicit JSON config paths', () => {
+      expect(() =>
+        configure(
+          {
+            konfuzTestPort: z.number().default(3000),
+          },
+          { configFile: true, argv: ['--config-file='] }
+        )
+      ).toThrow('--config-file requires a JSON file path');
+
+      expect(() =>
+        configure(
+          {
+            konfuzTestPort: z.number().default(3000),
+          },
+          {
+            configFile: true,
+            argv: ['--config-file', join(testDir, 'missing.json')],
+          }
+        )
+      ).toThrow('JSON config file not found');
+    });
+
+    it('redacts secret JSON values when printing sources and validation errors', () => {
+      const secretPath = join(testDir, 'secret.json');
+      writeFileSync(secretPath, '{"apiKey":"super-secret"}');
+      const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+
+      const config = configure(
+        {
+          apiKey: customConfigElement({
+            type: z.string(),
+            configPath: '.apiKey',
+            secret: true,
+          }),
+        },
+        {
+          configFile: true,
+          argv: ['--config-file', secretPath],
+        }
+      );
+
+      expect(config.apiKey).toBe('super-secret');
+      const sources = (config as { __$sources__?: Record<string, any> })
+        .__$sources__;
+      expect(sources!.apiKey.configFile.value).toBe('"super-secret"');
+
+      printConfiguredSources(config);
+
+      const output = log.mock.calls.flat().join('\n');
+      expect(output).toContain('Default JSON');
+      expect(output).toContain('JSON file');
+      expect(output).toContain('***');
+      expect(output).not.toContain('super-secret');
+
+      writeFileSync(secretPath, '{"apiKey":123}');
+      expect(() =>
+        configure(
+          {
+            apiKey: customConfigElement({
+              type: z.string(),
+              configPath: '.apiKey',
+              secret: true,
+            }),
+          },
+          {
+            configFile: true,
+            argv: ['--config-file', secretPath],
+          }
+        )
+      ).toThrow(/apiKey: \*\*\*/);
+    });
   });
 
   describe('boolean parsing', () => {

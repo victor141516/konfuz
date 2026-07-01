@@ -18,6 +18,8 @@ export interface FieldDescriptor {
   cmdNameShort?: string;
   /** Description shown next to this flag in `--help` output. */
   cmdDescription?: string;
+  /** Dot-notation path used to read this value from an opt-in JSON config file. */
+  configPath?: string;
   /** The resolved primitive type of this field. */
   type: FieldType;
   /** Whether the field can be absent (has `.optional()` or `.default()`). */
@@ -98,6 +100,8 @@ export interface FieldConfig<T extends ConfigFieldType = ConfigFieldType> {
   cmdNameShort?: string;
   /** Description shown next to this flag in `--help` output. */
   cmdDescription?: string;
+  /** Dot-notation path used to read this value from an opt-in JSON config file. */
+  configPath?: string;
   /**
    * Mark this field as sensitive. When `true`, its value is redacted
    * (shown as `***`) in error messages and log output.
@@ -128,6 +132,7 @@ export function customConfigElement<T extends SupportedZodTypes>(options: {
   cmdName?: string;
   cmdNameShort?: string;
   cmdDescription?: string;
+  configPath?: string;
   secret?: boolean;
 }): FieldConfig<T> {
   return {
@@ -136,6 +141,7 @@ export function customConfigElement<T extends SupportedZodTypes>(options: {
     cmdName: options?.cmdName,
     cmdNameShort: options?.cmdNameShort,
     cmdDescription: options?.cmdDescription,
+    configPath: options?.configPath,
     secret: options?.secret,
   };
 }
@@ -231,6 +237,28 @@ function isFieldConfig(
   );
 }
 
+function validateConfigPath(configPath: string, fieldName: string): void {
+  if (!configPath.startsWith('.')) {
+    throw new Error(
+      `[konfuz] configPath for "${fieldName}" must start with ".".`
+    );
+  }
+
+  const body = configPath.slice(1);
+  if (body === '') return;
+
+  const segments = body.split('.');
+  for (const [index, segment] of segments.entries()) {
+    const isTrailingEmptySegment =
+      segment === '' && index === segments.length - 1;
+    if (segment === '' && !isTrailingEmptySegment) {
+      throw new Error(
+        `[konfuz] configPath for "${fieldName}" must not contain empty middle segments.`
+      );
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Public schema-analysis functions
 // ---------------------------------------------------------------------------
@@ -254,6 +282,7 @@ export function extractSchemaInfo(config: ConfigInput): SchemaDescriptor {
     let customCmdName: string | undefined;
     let customCmdNameShort: string | undefined;
     let customCmdDescription: string | undefined;
+    let customConfigPath: string | undefined;
 
     let secret: boolean | undefined;
 
@@ -265,6 +294,7 @@ export function extractSchemaInfo(config: ConfigInput): SchemaDescriptor {
       customCmdName = value.cmdName;
       customCmdNameShort = value.cmdNameShort;
       customCmdDescription = value.cmdDescription;
+      customConfigPath = value.configPath;
       secret = value.secret;
     } else if (isSimpleType(value)) {
       schema = simpleTypeToZod(value);
@@ -276,12 +306,17 @@ export function extractSchemaInfo(config: ConfigInput): SchemaDescriptor {
 
     const { type, enumValues } = inferFieldType(schema);
 
+    if (customConfigPath !== undefined) {
+      validateConfigPath(customConfigPath, key);
+    }
+
     fields.push({
       name: key,
       envName: customEnvName ?? toEnvName(key),
       cmdName: customCmdName ?? toCliName(key),
       cmdNameShort: customCmdNameShort,
       cmdDescription: customCmdDescription,
+      configPath: customConfigPath,
       type,
       isOptional: isFieldOptional(schema),
       defaultValue: extractDefaultValue(schema),

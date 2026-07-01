@@ -113,4 +113,25 @@ describe('cli-parser', () => {
 
     expect(config).toEqual({});
   });
+
+  it('can omit defaults and report only provided CLI source values', () => {
+    const schema = {
+      port: z.number().default(3000),
+      host: z.string().default('localhost'),
+    };
+
+    const info = extractSchemaInfo(schema);
+
+    const result = parseCliArguments(info, {
+      argv: ['--host', 'example.com', '--unknown', 'value'],
+      includeMetadata: true,
+      includeDefaults: false,
+    });
+
+    expect(result).toEqual({
+      config: { host: 'example.com' },
+      rawValues: {},
+      sourceValues: { host: 'example.com' },
+    });
+  });
 });

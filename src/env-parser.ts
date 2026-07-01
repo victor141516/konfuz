@@ -13,8 +13,14 @@ export function parseEnvVariables(
   info: SchemaDescriptor,
   envFileConfig: EnvFileConfig
 ): EnvConfig {
-  const config: EnvConfig = {};
+  return {
+    ...parseEnvFileVariables(info, envFileConfig),
+    ...parseProcessEnvVariables(info),
+  };
+}
 
+export function parseProcessEnvVariables(info: SchemaDescriptor): EnvConfig {
+  const config: EnvConfig = {};
   for (const field of info.fields) {
     const envValue = process.env[field.envName];
     if (envValue !== undefined) {
@@ -22,9 +28,18 @@ export function parseEnvVariables(
     }
   }
 
+  return config;
+}
+
+export function parseEnvFileVariables(
+  info: SchemaDescriptor,
+  envFileConfig: EnvFileConfig
+): EnvConfig {
+  const config: EnvConfig = {};
+
   for (const [key, value] of Object.entries(envFileConfig)) {
     const field = info.fields.find((f) => f.envName === key);
-    if (field && value !== undefined && config[field.name] === undefined) {
+    if (field && value !== undefined) {
       config[field.name] = parseWithZod(value, field.type, field.enumValues);
     }
   }

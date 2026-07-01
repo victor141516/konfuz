@@ -142,6 +142,41 @@ describe('schema-transformer', () => {
       expect(info.fields[0].envName).toBe('MY_PORT');
       expect(info.fields[0].cmdName).toBe('--port-number');
     });
+
+    it('extracts customConfigElement configPath', () => {
+      const config = {
+        port: customConfigElement({
+          type: z.number(),
+          configPath: '.server.',
+        }),
+      };
+
+      const info = extractSchemaInfo(config);
+
+      expect(info.fields[0].configPath).toBe('.server.');
+    });
+
+    it('rejects configPath values that do not start with a dot', () => {
+      expect(() =>
+        extractSchemaInfo({
+          port: customConfigElement({
+            type: z.number(),
+            configPath: 'server.port',
+          }),
+        })
+      ).toThrow('must start with "."');
+    });
+
+    it('rejects configPath values with empty middle segments', () => {
+      expect(() =>
+        extractSchemaInfo({
+          port: customConfigElement({
+            type: z.number(),
+            configPath: '.server..port',
+          }),
+        })
+      ).toThrow('empty middle segments');
+    });
   });
 
   describe('extractDefaults', () => {

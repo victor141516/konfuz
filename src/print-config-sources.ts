@@ -1,7 +1,13 @@
 import table from 'table';
 import type { ConfigSourceEntry, SourceValue } from './index';
 
-export type ConfigSource = 'cli' | 'env' | 'envFile' | 'default';
+export type ConfigSource =
+  | 'cli'
+  | 'env'
+  | 'configFile'
+  | 'envFile'
+  | 'defaultConfigFile'
+  | 'default';
 
 export interface InternalSources {
   __$sources__?: Record<string, ConfigSourceEntry>;
@@ -13,6 +19,7 @@ const STYLES = {
   green: (text: string) => `\x1b[32m${text}\x1b[0m`,
   yellow: (text: string) => `\x1b[33m${text}\x1b[0m`,
   blue: (text: string) => `\x1b[34m${text}\x1b[0m`,
+  magenta: (text: string) => `\x1b[35m${text}\x1b[0m`,
   gray: (text: string) => `\x1b[90m${text}\x1b[0m`,
 };
 
@@ -49,8 +56,12 @@ function getFinalValueStyle(
       return STYLES.green(displayValue);
     case 'env':
       return STYLES.yellow(displayValue);
+    case 'configFile':
+      return STYLES.magenta(displayValue);
     case 'envFile':
       return STYLES.blue(displayValue);
+    case 'defaultConfigFile':
+      return STYLES.dim(displayValue);
     default:
       return STYLES.dim(displayValue);
   }
@@ -79,7 +90,9 @@ export function printConfiguredSources(configResult: unknown): void {
   const tableData: string[][] = [
     [
       STYLES.bold('Field'),
+      STYLES.bold('Default JSON'),
       STYLES.bold('.env file'),
+      STYLES.bold('JSON file'),
       STYLES.bold('Environment'),
       STYLES.bold('CLI'),
       STYLES.bold('Final value'),
@@ -89,15 +102,25 @@ export function printConfiguredSources(configResult: unknown): void {
   for (const name of fieldNames) {
     const entry = sources[name] as ConfigSourceEntry;
     if (!entry) {
-      tableData.push([name, '-', '-', '-', '-']);
+      tableData.push([name, '-', '-', '-', '-', '-', '-']);
       continue;
     }
 
     tableData.push([
       name,
       getCellStyle(
+        entry.defaultConfigFile,
+        entry.finalSource === 'defaultConfigFile',
+        entry.secret
+      ),
+      getCellStyle(
         entry.envFile,
         entry.finalSource === 'envFile',
+        entry.secret
+      ),
+      getCellStyle(
+        entry.configFile,
+        entry.finalSource === 'configFile',
         entry.secret
       ),
       getCellStyle(entry.env, entry.finalSource === 'env', entry.secret),
@@ -107,7 +130,7 @@ export function printConfiguredSources(configResult: unknown): void {
   }
 
   console.log(
-    '[konfuz] Configuration sources (priority: CLI > Environment > .env file > default)\n'
+    '[konfuz] Configuration sources (priority: CLI > Environment > JSON file > .env file > Default JSON > default)\n'
   );
   console.log(
     table.table(tableData, {
@@ -116,7 +139,9 @@ export function printConfiguredSources(configResult: unknown): void {
         1: { width: 30, truncate: 30 },
         2: { width: 30, truncate: 30 },
         3: { width: 30, truncate: 30 },
-        4: { width: 20, truncate: 20 },
+        4: { width: 30, truncate: 30 },
+        5: { width: 30, truncate: 30 },
+        6: { width: 20, truncate: 20 },
       },
     })
   );
