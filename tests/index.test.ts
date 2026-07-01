@@ -870,5 +870,18 @@ describe('configure', () => {
 
       expect(config.konfuzTestEnabled).toBe(false);
     });
+
+    it('does not let invalid CLI boolean values fall back to schema defaults', () => {
+      expect(() =>
+        configure(
+          {
+            konfuzTestEnabled: z.boolean().default(false),
+          },
+          {
+            argv: ['--konfuz-test-enabled', 'maybe'],
+          }
+        )
+      ).toThrow(/Configuration validation failed/);
+    });
   });
 });

@@ -444,6 +444,10 @@ function parseConfigFileCliOption(argv) {
 	let explicitPath;
 	for (let index = 0; index < argv.length; index += 1) {
 		const arg = argv[index];
+		if (arg === "--") {
+			strippedArgv.push(...argv.slice(index));
+			break;
+		}
 		if (arg === "--config-file") {
 			const value = argv[index + 1];
 			if (value === void 0 || value === "" || value.startsWith("-")) throw new Error(CONFIG_FILE_MISSING_PATH_ERROR);
@@ -570,13 +574,17 @@ function resolveConfigSources(info, shape, options) {
 	const envFileConfigValues = parseEnvFileVariables(info, envFileConfig);
 	const envConfigValues = parseProcessEnvVariables(info);
 	const cliResult = parseExplicitCliArguments(info, { argv: configFileSource.argv });
+	const cliConfigValues = {
+		...cliResult.config,
+		...cliResult.rawValues
+	};
 	const config = {
 		...defaults,
 		...configFileSource.defaultConfigFile.config,
 		...envFileConfigValues,
 		...configFileSource.configFile.config,
 		...envConfigValues,
-		...cliResult.config
+		...cliConfigValues
 	};
 	const sources = {};
 	for (const field of info.fields) {
@@ -585,7 +593,7 @@ function resolveConfigSources(info, shape, options) {
 		const envFileValue = envFileConfig[field.envName];
 		const defaultConfigFileValue = configFileSource.defaultConfigFile.sourceValues[name];
 		const configFileValue = configFileSource.configFile.sourceValues[name];
-		const cliValue = cliResult.sourceValues[name];
+		const cliValue = cliResult.sourceValues[name] ?? cliResult.rawValues[name];
 		const entry = {
 			finalSource: "default",
 			defaultConfigFile: defaultConfigFileValue,

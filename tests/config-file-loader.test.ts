@@ -64,6 +64,20 @@ describe('config-file-loader', () => {
     });
   });
 
+  it('leaves --config-file untouched after an argv terminator', () => {
+    expect(
+      parseConfigFileCliOption([
+        '--port',
+        '1',
+        '--',
+        '--config-file',
+        'local.json',
+      ])
+    ).toEqual({
+      argv: ['--port', '1', '--', '--config-file', 'local.json'],
+    });
+  });
+
   it('rejects empty or missing --config-file paths', () => {
     expect(() => parseConfigFileCliOption(['--config-file'])).toThrow(
       '--config-file requires a JSON file path'

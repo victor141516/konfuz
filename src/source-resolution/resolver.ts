@@ -48,6 +48,10 @@ export function resolveConfigSources(
   const cliResult = parseExplicitCliArguments(info, {
     argv: configFileSource.argv,
   });
+  const cliConfigValues = {
+    ...cliResult.config,
+    ...cliResult.rawValues,
+  };
 
   const config: Record<string, unknown> = {
     ...defaults,
@@ -55,7 +59,7 @@ export function resolveConfigSources(
     ...envFileConfigValues,
     ...configFileSource.configFile.config,
     ...envConfigValues,
-    ...cliResult.config,
+    ...cliConfigValues,
   };
 
   const sources: Record<string, ConfigSourceEntry> = {};
@@ -67,7 +71,7 @@ export function resolveConfigSources(
     const defaultConfigFileValue =
       configFileSource.defaultConfigFile.sourceValues[name];
     const configFileValue = configFileSource.configFile.sourceValues[name];
-    const cliValue = cliResult.sourceValues[name];
+    const cliValue = cliResult.sourceValues[name] ?? cliResult.rawValues[name];
 
     const entry: ConfigSourceEntry = {
       finalSource: 'default',

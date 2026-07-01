@@ -95,6 +95,11 @@ export function parseConfigFileCliOption(
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
 
+    if (arg === '--') {
+      strippedArgv.push(...argv.slice(index));
+      break;
+    }
+
     if (arg === CONFIG_FILE_FLAG) {
       const value = argv[index + 1];
       if (value === undefined || value === '' || value.startsWith('-')) {
