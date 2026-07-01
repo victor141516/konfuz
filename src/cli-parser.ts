@@ -29,16 +29,14 @@ function coerceBooleanValue(value: string | boolean): boolean | undefined {
   return undefined;
 }
 
-export function parseCliArguments(
+function toSourceValue(value: string | number | boolean): string {
+  return String(value);
+}
+
+function parseConfiguredCliArguments(
   info: SchemaDescriptor,
-  options?: {
-    argv?: string[];
-    includeMetadata?: boolean;
-    includeDefaults?: boolean;
-  }
-): CliConfig | CliParseResult {
-  const argv = options?.argv ?? hideBin(process.argv);
-  const includeDefaults = options?.includeDefaults ?? true;
+  argv: string[]
+): CliParseResult {
   const config: CliConfig = {};
   const rawValues: Record<string, string> = {};
   const sourceValues: Record<string, string> = {};
@@ -46,17 +44,7 @@ export function parseCliArguments(
   globalGenerator.reset();
 
   if (argv.length === 0) {
-    if (includeDefaults) {
-      for (const field of info.fields) {
-        if (field.defaultValue !== undefined) {
-          config[field.name] = field.defaultValue as string | number | boolean;
-        }
-      }
-    }
-    if (options?.includeMetadata) {
-      return { config, rawValues, sourceValues };
-    }
-    return config;
+    return { config, rawValues, sourceValues };
   }
 
   let y = yargs(argv);
@@ -99,21 +87,61 @@ export function parseCliArguments(
         const coerced = coerceBooleanValue(value);
         if (coerced !== undefined) {
           config[field.name] = coerced;
-          sourceValues[field.name] = String(coerced);
+          sourceValues[field.name] = toSourceValue(coerced);
         } else {
-          rawValues[field.name] = String(value);
+          rawValues[field.name] = value;
         }
       } else {
         config[field.name] = value as string | number | boolean;
-        sourceValues[field.name] = String(value);
+        sourceValues[field.name] = toSourceValue(value);
       }
-    } else if (includeDefaults && field.defaultValue !== undefined) {
-      config[field.name] = field.defaultValue as string | number | boolean;
     }
   }
 
-  if (options?.includeMetadata || Object.keys(rawValues).length > 0) {
-    return { config, rawValues, sourceValues };
+  return { config, rawValues, sourceValues };
+}
+
+function addDefaultValues(
+  info: SchemaDescriptor,
+  result: CliParseResult
+): CliParseResult {
+  for (const field of info.fields) {
+    if (
+      field.defaultValue !== undefined &&
+      result.config[field.name] === undefined &&
+      result.rawValues[field.name] === undefined
+    ) {
+      result.config[field.name] = field.defaultValue as
+        | string
+        | number
+        | boolean;
+    }
   }
-  return config;
+
+  return result;
+}
+
+export function parseCliArguments(
+  info: SchemaDescriptor,
+  options?: { argv?: string[] }
+): CliConfig | CliParseResult {
+  const result = addDefaultValues(
+    info,
+    parseConfiguredCliArguments(info, options?.argv ?? hideBin(process.argv))
+  );
+
+  if (Object.keys(result.rawValues).length > 0) {
+    return result;
+  }
+  return result.config;
+}
+
+export function parseExplicitCliArguments(
+  info: SchemaDescriptor,
+  options?: { argv?: string[] }
+): CliParseResult {
+  return parseConfiguredCliArguments(
+    info,
+    options?.argv ?? hideBin(process.argv)
+  );
 }

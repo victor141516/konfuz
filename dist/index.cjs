@@ -274,24 +274,19 @@ function coerceBooleanValue(value) {
 	if (BOOLEAN_TRUE_VALUES$1.has(lower)) return true;
 	if (BOOLEAN_FALSE_VALUES$1.has(lower)) return false;
 }
-function parseCliArguments(info, options) {
-	const argv = options?.argv ?? (0, yargs_helpers.hideBin)(process.argv);
-	const includeDefaults = options?.includeDefaults ?? true;
+function toSourceValue(value) {
+	return String(value);
+}
+function parseConfiguredCliArguments(info, argv) {
 	const config = {};
 	const rawValues = {};
 	const sourceValues = {};
 	globalGenerator.reset();
-	if (argv.length === 0) {
-		if (includeDefaults) {
-			for (const field of info.fields) if (field.defaultValue !== void 0) config[field.name] = field.defaultValue;
-		}
-		if (options?.includeMetadata) return {
-			config,
-			rawValues,
-			sourceValues
-		};
-		return config;
-	}
+	if (argv.length === 0) return {
+		config,
+		rawValues,
+		sourceValues
+	};
 	let y = (0, yargs.default)(argv);
 	for (const field of info.fields) {
 		const cliName = field.cmdName;
@@ -313,20 +308,21 @@ function parseCliArguments(info, options) {
 			const coerced = coerceBooleanValue(value);
 			if (coerced !== void 0) {
 				config[field.name] = coerced;
-				sourceValues[field.name] = String(coerced);
-			} else rawValues[field.name] = String(value);
+				sourceValues[field.name] = toSourceValue(coerced);
+			} else rawValues[field.name] = value;
 		} else {
 			config[field.name] = value;
-			sourceValues[field.name] = String(value);
+			sourceValues[field.name] = toSourceValue(value);
 		}
-		else if (includeDefaults && field.defaultValue !== void 0) config[field.name] = field.defaultValue;
 	}
-	if (options?.includeMetadata || Object.keys(rawValues).length > 0) return {
+	return {
 		config,
 		rawValues,
 		sourceValues
 	};
-	return config;
+}
+function parseExplicitCliArguments(info, options) {
+	return parseConfiguredCliArguments(info, options?.argv ?? (0, yargs_helpers.hideBin)(process.argv));
 }
 //#endregion
 //#region src/env-parser.ts
@@ -379,6 +375,15 @@ function parseWithZod(value, type, enumValues) {
 		return;
 	}
 	return value;
+}
+//#endregion
+//#region src/json-utils.ts
+function isJsonObject(value) {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function stringifyJsonValue(value) {
+	const serialized = JSON.stringify(value);
+	return serialized === void 0 ? String(value) : serialized;
 }
 //#endregion
 //#region src/config-file-loader.ts
@@ -449,7 +454,7 @@ function loadConfigFile(path$2, options) {
 		const reason = error instanceof Error ? error.message : String(error);
 		throw new Error(`[konfuz] Failed to parse JSON config file "${path$2}": ${reason}`);
 	}
-	if (typeof data !== "object" || data === null || Array.isArray(data)) throw new Error(`[konfuz] JSON config file "${path$2}" must contain a JSON object at the root.`);
+	if (!isJsonObject(data)) throw new Error(`[konfuz] JSON config file "${path$2}" must contain a JSON object at the root.`);
 	return {
 		path: path$2,
 		resolvedPath,
@@ -458,16 +463,13 @@ function loadConfigFile(path$2, options) {
 }
 //#endregion
 //#region src/config-file-parser.ts
-function isJsonObject(value) {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 function hasOwn$1(object, key) {
 	return Object.prototype.hasOwnProperty.call(object, key);
 }
-function serializeJsonValue(value) {
-	const serialized = JSON.stringify(value);
-	return serialized === void 0 ? String(value) : serialized;
-}
+/**
+* Converts a field's configured `configPath` into the exact object-key segments
+* used for lookup and the canonical display path used in source reporting.
+*/
 function resolveConfigLookupPath(field) {
 	const rawPath = field.configPath;
 	if (rawPath === void 0 || rawPath === ".") return {
@@ -487,6 +489,10 @@ function resolveConfigLookupPath(field) {
 function warnNonObjectIntermediate(file, field, lookupPath, traversedPath) {
 	console.warn(`[konfuz] Found non-object value at "${traversedPath}" while looking for "${lookupPath}" in configuration file "${file.path}". Treating "${field.name}" as missing from that file.`);
 }
+/**
+* Walks a JSON object by exact key segments. Missing final keys are silent,
+* while non-object intermediate values warn and make the field missing.
+*/
 function readPath(file, field, segments, displayPath) {
 	let current = file.data;
 	const traversedSegments = [];
@@ -504,6 +510,10 @@ function readPath(file, field, segments, displayPath) {
 		value: current
 	};
 }
+/**
+* Reads every declared config field from a loaded JSON file and returns a flat
+* config object plus JSON-formatted source metadata for values that were found.
+*/
 function parseConfigFileValues(info, file) {
 	const config = {};
 	const sourceValues = {};
@@ -514,7 +524,7 @@ function parseConfigFileValues(info, file) {
 		config[field.name] = result.value;
 		sourceValues[field.name] = {
 			name: `${file.path}:${displayPath}`,
-			value: serializeJsonValue(result.value)
+			value: stringifyJsonValue(result.value)
 		};
 	}
 	return {
@@ -664,11 +674,7 @@ function configure(config, options) {
 	const envFileConfig = options?.envPath ? loadEnvFile(options.envPath) : loadEnvFile();
 	const envFileConfigValues = parseEnvFileVariables(info, envFileConfig);
 	const envConfigValues = parseProcessEnvVariables(info);
-	const cliResult = parseCliArguments(info, {
-		argv,
-		includeMetadata: true,
-		includeDefaults: false
-	});
+	const cliResult = parseExplicitCliArguments(info, { argv });
 	const sources = {};
 	const merged = {
 		...defaults,

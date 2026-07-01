@@ -1,5 +1,6 @@
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
+import { isJsonObject } from './json-utils';
 
 export type ConfigFileOption =
   | boolean
@@ -126,11 +127,11 @@ export function loadConfigFile(
     );
   }
 
-  if (typeof data !== 'object' || data === null || Array.isArray(data)) {
+  if (!isJsonObject(data)) {
     throw new Error(
       `[konfuz] JSON config file "${path}" must contain a JSON object at the root.`
     );
   }
 
-  return { path, resolvedPath, data: data as Record<string, unknown> };
+  return { path, resolvedPath, data };
 }

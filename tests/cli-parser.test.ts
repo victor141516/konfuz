@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { parseCliArguments } from '../src/cli-parser';
+import {
+  parseCliArguments,
+  parseExplicitCliArguments,
+} from '../src/cli-parser';
 import { extractSchemaInfo } from '../src/schema-transformer';
 import { z } from 'zod';
 
@@ -122,10 +125,8 @@ describe('cli-parser', () => {
 
     const info = extractSchemaInfo(schema);
 
-    const result = parseCliArguments(info, {
+    const result = parseExplicitCliArguments(info, {
       argv: ['--host', 'example.com', '--unknown', 'value'],
-      includeMetadata: true,
-      includeDefaults: false,
     });
 
     expect(result).toEqual({

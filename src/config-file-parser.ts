@@ -1,5 +1,6 @@
 import type { FieldDescriptor, SchemaDescriptor } from './schema-transformer';
 import type { LoadedConfigFile } from './config-file-loader';
+import { isJsonObject, stringifyJsonValue } from './json-utils';
 
 interface ConfigFileSourceValue {
   name: string;
@@ -11,19 +12,14 @@ export interface ConfigFileParseResult {
   sourceValues: Record<string, ConfigFileSourceValue>;
 }
 
-function isJsonObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
 function hasOwn(object: Record<string, unknown>, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(object, key);
 }
 
-function serializeJsonValue(value: unknown): string {
-  const serialized = JSON.stringify(value);
-  return serialized === undefined ? String(value) : serialized;
-}
-
+/**
+ * Converts a field's configured `configPath` into the exact object-key segments
+ * used for lookup and the canonical display path used in source reporting.
+ */
 export function resolveConfigLookupPath(field: FieldDescriptor): {
   segments: string[];
   displayPath: string;
@@ -60,6 +56,10 @@ function warnNonObjectIntermediate(
   );
 }
 
+/**
+ * Walks a JSON object by exact key segments. Missing final keys are silent,
+ * while non-object intermediate values warn and make the field missing.
+ */
 function readPath(
   file: LoadedConfigFile,
   field: FieldDescriptor,
@@ -91,6 +91,10 @@ function readPath(
   return { found: true, value: current };
 }
 
+/**
+ * Reads every declared config field from a loaded JSON file and returns a flat
+ * config object plus JSON-formatted source metadata for values that were found.
+ */
 export function parseConfigFileValues(
   info: SchemaDescriptor,
   file: LoadedConfigFile
@@ -108,7 +112,7 @@ export function parseConfigFileValues(
     config[field.name] = result.value;
     sourceValues[field.name] = {
       name: `${file.path}:${displayPath}`,
-      value: serializeJsonValue(result.value),
+      value: stringifyJsonValue(result.value),
     };
   }
 

@@ -11,7 +11,7 @@ import {
   type ConfigFieldType,
 } from './schema-transformer';
 import { loadEnvFile, type EnvFileConfig } from './loader';
-import { parseCliArguments, type CliParseResult } from './cli-parser';
+import { parseExplicitCliArguments } from './cli-parser';
 import { parseEnvFileVariables, parseProcessEnvVariables } from './env-parser';
 import {
   loadConfigFile,
@@ -143,11 +143,9 @@ export function configure<T extends ConfigInput>(
   const envFileConfigValues = parseEnvFileVariables(info, envFileConfig);
   const envConfigValues = parseProcessEnvVariables(info);
 
-  const cliResult = parseCliArguments(info, {
+  const cliResult = parseExplicitCliArguments(info, {
     argv,
-    includeMetadata: true,
-    includeDefaults: false,
-  }) as CliParseResult;
+  });
 
   const sources: Record<string, ConfigSourceEntry> = {};
 
