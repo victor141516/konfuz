@@ -96,6 +96,22 @@ function toCliName(key) {
 }
 /** Unwraps Zod wrapper types (Default, Optional, Nullable, Readonly) to determine the core FieldType. */
 function inferFieldType(schema) {
+	const def = getZodDef(schema);
+	switch (def?.type) {
+		case "string": return { type: "string" };
+		case "number": return { type: "number" };
+		case "boolean": return { type: "boolean" };
+		case "enum": return {
+			type: "enum",
+			enumValues: schema.options
+		};
+		case "default":
+		case "optional":
+		case "nullable":
+		case "readonly":
+			if (def.innerType) return inferFieldType(def.innerType);
+			break;
+	}
 	if (schema instanceof z.ZodString) return { type: "string" };
 	if (schema instanceof z.ZodNumber) return { type: "number" };
 	if (schema instanceof z.ZodBoolean) return { type: "boolean" };
@@ -114,6 +130,11 @@ function inferFieldType(schema) {
 * if the schema has no default.
 */
 function extractDefaultValue(schema) {
+	const def = getZodDef(schema);
+	if (def?.type === "default") {
+		const defaultValue = def.defaultValue;
+		return typeof defaultValue === "function" ? defaultValue() : defaultValue;
+	}
 	if (schema instanceof z.ZodDefault) {
 		const defaultValue = schema.def.defaultValue;
 		return typeof defaultValue === "function" ? defaultValue() : defaultValue;
@@ -121,6 +142,9 @@ function extractDefaultValue(schema) {
 }
 /** Returns `true` when the schema allows the field to be absent at parse time. */
 function isFieldOptional(schema) {
+	const def = getZodDef(schema);
+	if (def?.type === "optional" || def?.type === "default") return true;
+	if (def?.type === "readonly" && def.innerType) return isFieldOptional(def.innerType);
 	if (schema instanceof z.ZodOptional) return true;
 	if (schema instanceof z.ZodDefault) return true;
 	if (schema instanceof z.ZodReadonly) return isFieldOptional(schema.def.innerType);
@@ -140,9 +164,20 @@ function isSimpleType(value) {
 		"boolean"
 	].includes(value);
 }
+function getZodDef(schema) {
+	const schemaLike = schema;
+	return schemaLike.def ?? schemaLike._def ?? schemaLike._zod?.def;
+}
+function isZodSchema(value) {
+	if (value === null || typeof value !== "object") return false;
+	const candidate = value;
+	return typeof candidate.safeParse === "function" && (candidate.def !== void 0 || candidate._def !== void 0 || candidate._zod !== void 0);
+}
 /** Type guard: returns `true` when a config entry is a `FieldConfig` rather than a bare Zod schema or simple type. */
 function isFieldConfig(value) {
-	return typeof value === "object" && value !== null && "type" in value && (value.type instanceof z.ZodType || isSimpleType(value.type));
+	if (isZodSchema(value)) return false;
+	const type = value?.type;
+	return typeof value === "object" && value !== null && "type" in value && (isZodSchema(type) || isSimpleType(type));
 }
 /**
 * Analyses a user-provided config object (or `z.ZodObject`) and returns a

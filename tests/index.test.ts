@@ -75,6 +75,7 @@ import {
   printConfiguredSources,
   type ConfigSourceEntry,
 } from '../src/index';
+import type { ConfigInput } from '../src/schema-transformer';
 import { z } from 'zod';
 import { writeFileSync, unlinkSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
@@ -358,6 +359,136 @@ describe('configure', () => {
         { envPath }
       )
     ).toThrow(/Configuration validation failed/);
+  });
+
+  describe('preserves Zod validation for supported schema shapes', () => {
+    const cliValidationCases: {
+      name: string;
+      config: ConfigInput;
+      argv: string[];
+    }[] = [
+      {
+        name: 'number max',
+        config: { port: z.number().max(100) },
+        argv: ['--port', '123'],
+      },
+      {
+        name: 'number min',
+        config: { port: z.number().min(200) },
+        argv: ['--port', '123'],
+      },
+      {
+        name: 'number int',
+        config: { port: z.number().int() },
+        argv: ['--port', '123.4'],
+      },
+      {
+        name: 'number positive',
+        config: { port: z.number().positive() },
+        argv: ['--port', '-1'],
+      },
+      {
+        name: 'string min',
+        config: { name: z.string().min(3) },
+        argv: ['--name', 'ab'],
+      },
+      {
+        name: 'string email',
+        config: { email: z.string().email() },
+        argv: ['--email', 'not-an-email'],
+      },
+      {
+        name: 'string url',
+        config: { url: z.string().url() },
+        argv: ['--url', 'example.com'],
+      },
+      {
+        name: 'string regex',
+        config: { apiKey: z.string().regex(/^api_/) },
+        argv: ['--api-key', 'web_key'],
+      },
+      {
+        name: 'boolean refine',
+        config: {
+          enabled: z.boolean().refine((value) => value, 'must be enabled'),
+        },
+        argv: ['--enabled', 'false'],
+      },
+      {
+        name: 'optional wrapper inner validation',
+        config: { name: z.string().min(3).optional() },
+        argv: ['--name', 'ab'],
+      },
+      {
+        name: 'default wrapper inner validation',
+        config: { port: z.number().min(10).default(20) },
+        argv: ['--port', '5'],
+      },
+      {
+        name: 'readonly wrapper inner validation',
+        config: { name: z.string().min(3).readonly() },
+        argv: ['--name', 'ab'],
+      },
+      {
+        name: 'customConfigElement inner validation',
+        config: {
+          email: customConfigElement({ type: z.string().email() }),
+        },
+        argv: ['--email', 'not-an-email'],
+      },
+    ];
+
+    for (const validationCase of cliValidationCases) {
+      it(`rejects invalid ${validationCase.name}`, () => {
+        expect(() =>
+          configure(validationCase.config, { argv: validationCase.argv })
+        ).toThrow(/Configuration validation failed/);
+      });
+    }
+
+    it('rejects invalid enum values', () => {
+      process.env.MODE = 'test';
+
+      expect(() =>
+        configure({
+          mode: z.enum(['dev', 'prod']),
+        })
+      ).toThrow(/Configuration validation failed/);
+    });
+
+    it('preserves nullable wrapper inner validation for JSON values', () => {
+      const nullablePath = join(testDir, 'nullable.json');
+      writeFileSync(nullablePath, JSON.stringify({ name: 'ab' }));
+
+      expect(() =>
+        configure(
+          {
+            name: z.string().min(3).nullable(),
+          },
+          {
+            configFile: true,
+            argv: ['--config-file', nullablePath],
+          }
+        )
+      ).toThrow(/Configuration validation failed/);
+    });
+
+    it('accepts null from JSON config files for nullable fields', () => {
+      const nullablePath = join(testDir, 'nullable.json');
+      writeFileSync(nullablePath, JSON.stringify({ name: null }));
+
+      const config = configure(
+        {
+          name: z.string().min(3).nullable(),
+        },
+        {
+          configFile: true,
+          argv: ['--config-file', nullablePath],
+        }
+      );
+
+      expect(config.name).toBeNull();
+    });
   });
 
   it('does not let invalid env file values fall back to schema defaults', () => {

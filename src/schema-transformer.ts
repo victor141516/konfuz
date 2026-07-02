@@ -117,6 +117,19 @@ export interface FieldConfig<T extends ConfigFieldType = ConfigFieldType> {
  */
 export type ConfigInput = Record<string, ConfigFieldType | FieldConfig>;
 
+type ZodDefLike = {
+  type?: string;
+  innerType?: z.ZodType;
+  defaultValue?: unknown;
+};
+
+type ZodSchemaLike = z.ZodType & {
+  def?: ZodDefLike;
+  _def?: ZodDefLike;
+  _zod?: { def?: ZodDefLike };
+  options?: string[];
+};
+
 // ---------------------------------------------------------------------------
 // Public helpers
 // ---------------------------------------------------------------------------
@@ -172,6 +185,29 @@ function inferFieldType(schema: z.ZodType): {
   type: FieldType;
   enumValues?: string[];
 } {
+  const def = getZodDef(schema);
+  switch (def?.type) {
+    case 'string':
+      return { type: 'string' };
+    case 'number':
+      return { type: 'number' };
+    case 'boolean':
+      return { type: 'boolean' };
+    case 'enum':
+      return {
+        type: 'enum',
+        enumValues: (schema as ZodSchemaLike).options as string[],
+      };
+    case 'default':
+    case 'optional':
+    case 'nullable':
+    case 'readonly':
+      if (def.innerType) {
+        return inferFieldType(def.innerType);
+      }
+      break;
+  }
+
   if (schema instanceof z.ZodString) return { type: 'string' };
   if (schema instanceof z.ZodNumber) return { type: 'number' };
   if (schema instanceof z.ZodBoolean) return { type: 'boolean' };
@@ -193,6 +229,12 @@ function inferFieldType(schema: z.ZodType): {
  * if the schema has no default.
  */
 function extractDefaultValue(schema: z.ZodType): unknown {
+  const def = getZodDef(schema);
+  if (def?.type === 'default') {
+    const defaultValue = def.defaultValue;
+    return typeof defaultValue === 'function' ? defaultValue() : defaultValue;
+  }
+
   if (schema instanceof z.ZodDefault) {
     const defaultValue = schema.def.defaultValue;
     return typeof defaultValue === 'function' ? defaultValue() : defaultValue;
@@ -202,6 +244,12 @@ function extractDefaultValue(schema: z.ZodType): unknown {
 
 /** Returns `true` when the schema allows the field to be absent at parse time. */
 function isFieldOptional(schema: z.ZodType): boolean {
+  const def = getZodDef(schema);
+  if (def?.type === 'optional' || def?.type === 'default') return true;
+  if (def?.type === 'readonly' && def.innerType) {
+    return isFieldOptional(def.innerType);
+  }
+
   if (schema instanceof z.ZodOptional) return true;
   if (schema instanceof z.ZodDefault) return true;
   if (schema instanceof z.ZodReadonly)
@@ -226,15 +274,42 @@ function isSimpleType(value: unknown): value is SimpleType {
   );
 }
 
+function getZodDef(schema: z.ZodType): ZodDefLike | undefined {
+  const schemaLike = schema as ZodSchemaLike;
+  return schemaLike.def ?? schemaLike._def ?? schemaLike._zod?.def;
+}
+
+function isZodSchema(value: unknown): value is z.ZodType {
+  if (value === null || typeof value !== 'object') return false;
+
+  const candidate = value as {
+    safeParse?: unknown;
+    def?: unknown;
+    _def?: unknown;
+    _zod?: unknown;
+  };
+
+  return (
+    typeof candidate.safeParse === 'function' &&
+    (candidate.def !== undefined ||
+      candidate._def !== undefined ||
+      candidate._zod !== undefined)
+  );
+}
+
 /** Type guard: returns `true` when a config entry is a `FieldConfig` rather than a bare Zod schema or simple type. */
 function isFieldConfig(
   value: ConfigFieldType | FieldConfig
 ): value is FieldConfig {
+  if (isZodSchema(value)) return false;
+
+  const type = (value as { type?: unknown })?.type;
+
   return (
     typeof value === 'object' &&
     value !== null &&
     'type' in value &&
-    (value.type instanceof z.ZodType || isSimpleType(value.type))
+    (isZodSchema(type) || isSimpleType(type))
   );
 }
 
