@@ -96,6 +96,8 @@ Values are merged in this order (highest priority wins):
 5. **Default JSON file** configured with `options.configFile`
 6. **Default values** (from Zod `.default()`)
 
+![Configuration source priority](assets/konfuz-config-priority-illustrations/01-priority-order.png)
+
 ```bash
 # CLI takes precedence over env vars
 PORT=3000 node app.js --port 8080  # port will be 8080
