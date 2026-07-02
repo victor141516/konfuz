@@ -192,9 +192,7 @@ When JSON config support is enabled, `--config-file` is reserved for the JSON fi
 
 JSON values are passed to Zod as native JSON values, without `.env`-style string coercion. For example, `{ "port": 3000 }` is valid for `z.number()`, while `{ "port": "3000" }` is only valid if the schema accepts a string or performs its own coercion. JSON `null` is treated as present and is passed to Zod as `null`.
 
-Unknown JSON keys are ignored. By default, each field reads its original `configure()` key from the JSON root.
-
-Use `configPath` to customize a field's JSON lookup:
+Unknown JSON keys are ignored. By default, each field reads its original `configure()` key from the JSON root. Use `configPath` to customize a field's JSON lookup:
 
 ```typescript
 const config = configure(
