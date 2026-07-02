@@ -92,6 +92,9 @@ interface ConfigSourceEntry {
   cli?: SourceValue;
   secret?: boolean;
 }
+interface InternalSources {
+  __$sources__: Record<string, ConfigSourceEntry>;
+}
 //#endregion
 //#region src/source-resolution/resolver.d.ts
 interface SourceResolverOptions {
@@ -107,6 +110,6 @@ declare function printConfiguredSources(configResult: unknown): void;
 interface ParseMyConfOptions extends SourceResolverOptions {}
 type InferConfig<T extends ConfigInput> = { [K in keyof T]: T[K] extends z.ZodTypeAny ? z.infer<T[K]> : T[K] extends FieldConfig ? T[K]['type'] extends z.ZodTypeAny ? z.infer<T[K]['type']> : T[K]['type'] extends SimpleType ? SimpleToNative<T[K]['type']> : never : T[K] extends SimpleType ? SimpleToNative<T[K]> : never };
 type SimpleToNative<T extends SimpleType> = T extends 'string' ? string : T extends 'number' ? number : T extends 'boolean' ? boolean : never;
-declare function configure<T extends ConfigInput>(config: T, options?: ParseMyConfOptions): InferConfig<T>;
+declare function configure<T extends ConfigInput>(config: T, options?: ParseMyConfOptions): InferConfig<T> & InternalSources;
 //#endregion
 export { type ConfigFieldType, type ConfigSource, type ConfigSourceEntry, InferConfig, ParseMyConfOptions, type SimpleType, type SourceValue, configure, customConfigElement, printConfiguredSources, toCliName, toEnvName };

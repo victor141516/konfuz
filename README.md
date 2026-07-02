@@ -387,7 +387,7 @@ node app.js --port 8080 --debug
 
 ## 📄 API Reference
 
-### `configure<T extends ConfigInput>(config: T, options?: ParseMyConfOptions): InferConfig<T> & { __$sources__?: Record<string, ConfigSourceEntry> }`
+### `configure<T extends ConfigInput>(config: T, options?: ParseMyConfOptions): InferConfig<T> & { __$sources__: Record<string, ConfigSourceEntry> }`
 
 Main function to configure and parse application configuration.
 

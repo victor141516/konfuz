@@ -23,7 +23,7 @@ export interface ConfigSourceEntry {
 }
 
 export interface InternalSources {
-  __$sources__?: Record<string, ConfigSourceEntry>;
+  __$sources__: Record<string, ConfigSourceEntry>;
 }
 
 export type SourceValueKey =

@@ -50,7 +50,7 @@ export type {
 export function configure<T extends ConfigInput>(
   config: T,
   options?: ParseMyConfOptions
-): InferConfig<T> {
+): InferConfig<T> & InternalSources {
   const info = extractSchemaInfo(config as ConfigInput);
 
   const schema: z.ZodObject<Record<string, z.ZodTypeAny>> =
