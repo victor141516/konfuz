@@ -664,13 +664,13 @@ function resolveConfigSources(info, shape, options) {
 			entry.finalValue = envValue;
 		} else if (configFileValue !== void 0) {
 			entry.finalSource = "configFile";
-			entry.finalValue = getPresentValueAsString(config, name);
+			entry.finalValue = configFileValue.value;
 		} else if (envFileValue !== void 0) {
 			entry.finalSource = "envFile";
 			entry.finalValue = envFileValue;
 		} else if (defaultConfigFileValue !== void 0) {
 			entry.finalSource = "defaultConfigFile";
-			entry.finalValue = getPresentValueAsString(config, name);
+			entry.finalValue = defaultConfigFileValue.value;
 		} else {
 			const defaultValue = getPresentValueAsString(config, name);
 			if (defaultValue !== void 0) entry.finalValue = defaultValue;

@@ -623,7 +623,7 @@ describe('configure', () => {
         name: `${explicitPath}:.konfuzTestHost`,
         value: '"json-host"',
       });
-      expect(sources!.konfuzTestHost.finalValue).toBe('json-host');
+      expect(sources!.konfuzTestHost.finalValue).toBe('"json-host"');
       expect(sources!.konfuzTestPort.cli).toBeUndefined();
     });
 
@@ -653,7 +653,7 @@ describe('configure', () => {
         .__$sources__;
       expect(sources!.konfuzTestPort.finalSource).toBe('envFile');
       expect(sources!.konfuzTestHost.finalSource).toBe('defaultConfigFile');
-      expect(sources!.konfuzTestHost.finalValue).toBe('default-json-host');
+      expect(sources!.konfuzTestHost.finalValue).toBe('"default-json-host"');
     });
 
     it('rejects field CLI flags that collide with --config-file when JSON support is enabled', () => {

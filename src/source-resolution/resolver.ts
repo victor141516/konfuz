@@ -100,13 +100,13 @@ export function resolveConfigSources(
       entry.finalValue = envValue;
     } else if (configFileValue !== undefined) {
       entry.finalSource = 'configFile';
-      entry.finalValue = getPresentValueAsString(config, name);
+      entry.finalValue = configFileValue.value;
     } else if (envFileValue !== undefined) {
       entry.finalSource = 'envFile';
       entry.finalValue = envFileValue;
     } else if (defaultConfigFileValue !== undefined) {
       entry.finalSource = 'defaultConfigFile';
-      entry.finalValue = getPresentValueAsString(config, name);
+      entry.finalValue = defaultConfigFileValue.value;
     } else {
       const defaultValue = getPresentValueAsString(config, name);
       if (defaultValue !== undefined) {
