@@ -2,7 +2,7 @@
 
 **Configuration management for NPM applications made simple** ⚙️
 
-A zero-boilerplate configuration library that reads from opt-in JSON config files, `.env` files, environment variables, and CLI arguments with full type safety using Zod schemas.
+A zero-boilerplate configuration library that reads from JSON config files, `.env` files, environment variables, and CLI arguments with full type safety using Zod schemas.
 
 konfuz can be customized in different ways. At its simplest, you define a plain object with basic parameters and get environment variable and CLI argument parsing out of the box. For more advanced use cases, you can use `customConfigElement()` to fully tailor environment variable names, CLI flags, short aliases, descriptions, and even mark fields as secrets.
 
