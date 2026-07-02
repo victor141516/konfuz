@@ -73,22 +73,6 @@ describe('cli-parser', () => {
     expect(config.verbose).toBe(true);
   });
 
-  it('applies default values for missing arguments', () => {
-    const schema = {
-      port: z.number().default(3000),
-      host: z.string().default('localhost'),
-    };
-
-    const info = extractSchemaInfo(schema);
-
-    mockArgs([]);
-
-    const config = parseCliArguments(info);
-
-    expect(config.port).toBe(3000);
-    expect(config.host).toBe('localhost');
-  });
-
   it('converts kebab-case to camelCase', () => {
     const schema = {
       databaseHost: z.string(),

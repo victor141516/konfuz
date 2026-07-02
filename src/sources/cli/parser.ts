@@ -83,33 +83,13 @@ function parseConfiguredCliArguments(
   return { config, rawValues, sourceValues };
 }
 
-function addDefaultValues(
-  info: SchemaDescriptor,
-  result: CliParseResult
-): CliParseResult {
-  for (const field of info.fields) {
-    if (
-      field.defaultValue !== undefined &&
-      result.config[field.name] === undefined &&
-      result.rawValues[field.name] === undefined
-    ) {
-      result.config[field.name] = field.defaultValue as
-        | string
-        | number
-        | boolean;
-    }
-  }
-
-  return result;
-}
-
 export function parseCliArguments(
   info: SchemaDescriptor,
   options?: { argv?: string[] }
 ): CliConfig | CliParseResult {
-  const result = addDefaultValues(
+  const result = parseConfiguredCliArguments(
     info,
-    parseConfiguredCliArguments(info, options?.argv ?? hideBin(process.argv))
+    options?.argv ?? hideBin(process.argv)
   );
 
   if (Object.keys(result.rawValues).length > 0) {

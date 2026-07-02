@@ -13,6 +13,7 @@ import {
   type SourceResolverOptions,
 } from './source-resolution/resolver';
 import type { InternalSources } from './source-resolution/ledger';
+import { getPresentValueAsString } from './utils/source-values';
 
 export interface ParseMyConfOptions extends SourceResolverOptions {}
 
@@ -56,7 +57,7 @@ export function configure<T extends ConfigInput>(
   const schema: z.ZodObject<Record<string, z.ZodTypeAny>> =
     normalizeToZodObject(config as ConfigInput);
 
-  const sourceResolution = resolveConfigSources(info, schema.shape, options);
+  const sourceResolution = resolveConfigSources(info, options);
 
   const result = schema.safeParse(sourceResolution.config);
 
@@ -74,6 +75,14 @@ export function configure<T extends ConfigInput>(
   }
 
   const data = result.data as InferConfig<T> & InternalSources;
+  for (const [name, entry] of Object.entries(sourceResolution.sources)) {
+    if (entry.finalSource !== 'default' || entry.finalValue !== undefined) {
+      continue;
+    }
+
+    entry.finalValue = getPresentValueAsString(data, name);
+  }
+
   data.__$sources__ = sourceResolution.sources;
 
   return data;

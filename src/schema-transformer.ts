@@ -23,10 +23,6 @@ export interface FieldDescriptor {
   configPath?: string;
   /** The resolved primitive type of this field. */
   type: FieldType;
-  /** Whether the field can be absent (has `.optional()` or `.default()`). */
-  isOptional: boolean;
-  /** The default value, if one was declared with `.default()`. */
-  defaultValue?: unknown;
   /** Valid string values for `'enum'` typed fields. */
   enumValues?: string[];
   /**
@@ -38,17 +34,11 @@ export interface FieldDescriptor {
 
 /**
  * The result of `extractSchemaInfo()`.
- * Bundles the resolved field descriptors with the original Zod schemas so
- * consumers can perform their own Zod operations when needed.
+ * Contains the field metadata needed to map external sources to config keys.
  */
 export interface SchemaDescriptor {
   /** Metadata for every field in the user's config. */
   fields: FieldDescriptor[];
-  /**
-   * The raw Zod schema for each field, keyed by the original camelCase field
-   * name. Useful for callers that need to run their own `safeParse` calls.
-   */
-  zodSchemas: Record<string, z.ZodType>;
 }
 
 /** The four core primitive Zod types the library can coerce from strings. */
@@ -85,6 +75,8 @@ export type SimpleType = 'string' | 'number' | 'boolean';
 
 export type ConfigFieldType = SupportedZodTypes | SimpleType;
 
+const FIELD_CONFIG_MARKER: unique symbol = Symbol('konfuz.fieldConfig');
+
 /**
  * Optional user-supplied customisation for a single configuration field.
  * Create one with the `customConfigElement()` helper and use it in place of a
@@ -120,7 +112,6 @@ export type ConfigInput = Record<string, ConfigFieldType | FieldConfig>;
 type ZodDefLike = {
   type?: string;
   innerType?: z.ZodType;
-  defaultValue?: unknown;
 };
 
 type ZodSchemaLike = z.ZodType & {
@@ -149,7 +140,7 @@ export function customConfigElement<T extends SupportedZodTypes>(options: {
   configPath?: string;
   secret?: boolean;
 }): FieldConfig<T> {
-  return {
+  const element: FieldConfig<T> = {
     type: options.type,
     envName: options?.envName,
     cmdName: options?.cmdName,
@@ -158,6 +149,9 @@ export function customConfigElement<T extends SupportedZodTypes>(options: {
     configPath: options?.configPath,
     secret: options?.secret,
   };
+
+  Object.defineProperty(element, FIELD_CONFIG_MARKER, { value: true });
+  return element;
 }
 
 /** Converts a camelCase key to UPPER_SNAKE_CASE (e.g. `databaseHost` → `DATABASE_HOST`). */
@@ -224,39 +218,6 @@ function inferFieldType(schema: z.ZodType): {
   return { type: 'string' };
 }
 
-/**
- * Returns the default value declared on a `ZodDefault` schema, or `undefined`
- * if the schema has no default.
- */
-function extractDefaultValue(schema: z.ZodType): unknown {
-  const def = getZodDef(schema);
-  if (def?.type === 'default') {
-    const defaultValue = def.defaultValue;
-    return typeof defaultValue === 'function' ? defaultValue() : defaultValue;
-  }
-
-  if (schema instanceof z.ZodDefault) {
-    const defaultValue = schema.def.defaultValue;
-    return typeof defaultValue === 'function' ? defaultValue() : defaultValue;
-  }
-  return undefined;
-}
-
-/** Returns `true` when the schema allows the field to be absent at parse time. */
-function isFieldOptional(schema: z.ZodType): boolean {
-  const def = getZodDef(schema);
-  if (def?.type === 'optional' || def?.type === 'default') return true;
-  if (def?.type === 'readonly' && def.innerType) {
-    return isFieldOptional(def.innerType);
-  }
-
-  if (schema instanceof z.ZodOptional) return true;
-  if (schema instanceof z.ZodDefault) return true;
-  if (schema instanceof z.ZodReadonly)
-    return isFieldOptional(schema.def.innerType as z.ZodType);
-  return false;
-}
-
 function simpleTypeToZod(type: SimpleType): SupportedZodTypes {
   switch (type) {
     case 'string':
@@ -279,37 +240,13 @@ function getZodDef(schema: z.ZodType): ZodDefLike | undefined {
   return schemaLike.def ?? schemaLike._def ?? schemaLike._zod?.def;
 }
 
-function isZodSchema(value: unknown): value is z.ZodType {
-  if (value === null || typeof value !== 'object') return false;
-
-  const candidate = value as {
-    safeParse?: unknown;
-    def?: unknown;
-    _def?: unknown;
-    _zod?: unknown;
-  };
-
-  return (
-    typeof candidate.safeParse === 'function' &&
-    (candidate.def !== undefined ||
-      candidate._def !== undefined ||
-      candidate._zod !== undefined)
-  );
-}
-
-/** Type guard: returns `true` when a config entry is a `FieldConfig` rather than a bare Zod schema or simple type. */
 function isFieldConfig(
   value: ConfigFieldType | FieldConfig
 ): value is FieldConfig {
-  if (isZodSchema(value)) return false;
-
-  const type = (value as { type?: unknown })?.type;
+  if (value === null || typeof value !== 'object') return false;
 
   return (
-    typeof value === 'object' &&
-    value !== null &&
-    'type' in value &&
-    (isZodSchema(type) || isSimpleType(type))
+    (value as { [FIELD_CONFIG_MARKER]?: unknown })[FIELD_CONFIG_MARKER] === true
   );
 }
 
@@ -318,12 +255,11 @@ function isFieldConfig(
 // ---------------------------------------------------------------------------
 
 /**
- * Analyses a user-provided config object (or `z.ZodObject`) and returns a
- * `SchemaDescriptor` containing per-field metadata and the raw Zod schemas.
+ * Analyses a user-provided config object and returns the per-field metadata
+ * needed to read external configuration sources.
  */
 export function extractSchemaInfo(config: ConfigInput): SchemaDescriptor {
   const fields: FieldDescriptor[] = [];
-  const zodSchemas: Record<string, z.ZodType> = {};
 
   const entries = Object.entries(config) as [
     string,
@@ -356,8 +292,6 @@ export function extractSchemaInfo(config: ConfigInput): SchemaDescriptor {
       schema = value;
     }
 
-    zodSchemas[key] = schema;
-
     const { type, enumValues } = inferFieldType(schema);
 
     if (customConfigPath !== undefined) {
@@ -375,33 +309,12 @@ export function extractSchemaInfo(config: ConfigInput): SchemaDescriptor {
       cmdDescription: customCmdDescription,
       configPath: customConfigPath,
       type,
-      isOptional: isFieldOptional(schema),
-      defaultValue: extractDefaultValue(schema),
       enumValues,
       secret,
     });
   }
 
-  return { fields, zodSchemas };
-}
-
-/**
- * Extracts all default values from a Zod shape (the `.shape` property of a
- * `z.ZodObject`), returning them as a plain key/value record.
- */
-export function extractDefaults(
-  shape: Record<string, z.ZodType>
-): Record<string, unknown> {
-  const defaults: Record<string, unknown> = {};
-
-  for (const [key, schema] of Object.entries(shape)) {
-    const defaultValue = extractDefaultValue(schema);
-    if (defaultValue !== undefined) {
-      defaults[key] = defaultValue;
-    }
-  }
-
-  return defaults;
+  return { fields };
 }
 
 /**

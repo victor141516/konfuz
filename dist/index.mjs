@@ -69,6 +69,7 @@ function readConfigLookupPath(data, lookupPath) {
 }
 //#endregion
 //#region src/schema-transformer.ts
+const FIELD_CONFIG_MARKER = Symbol("konfuz.fieldConfig");
 /**
 * Creates a configuration field with custom env var and/or CLI flag names.
 *
@@ -76,7 +77,7 @@ function readConfigLookupPath(data, lookupPath) {
 * customConfigElement({ type: z.number(), envName: 'SERVER_PORT', cmdNameShort: 'p' })
 */
 function customConfigElement(options) {
-	return {
+	const element = {
 		type: options.type,
 		envName: options?.envName,
 		cmdName: options?.cmdName,
@@ -85,6 +86,8 @@ function customConfigElement(options) {
 		configPath: options?.configPath,
 		secret: options?.secret
 	};
+	Object.defineProperty(element, FIELD_CONFIG_MARKER, { value: true });
+	return element;
 }
 /** Converts a camelCase key to UPPER_SNAKE_CASE (e.g. `databaseHost` → `DATABASE_HOST`). */
 function toEnvName(key) {
@@ -125,31 +128,6 @@ function inferFieldType(schema) {
 	if (schema instanceof z.ZodReadonly) return inferFieldType(schema.def.innerType);
 	return { type: "string" };
 }
-/**
-* Returns the default value declared on a `ZodDefault` schema, or `undefined`
-* if the schema has no default.
-*/
-function extractDefaultValue(schema) {
-	const def = getZodDef(schema);
-	if (def?.type === "default") {
-		const defaultValue = def.defaultValue;
-		return typeof defaultValue === "function" ? defaultValue() : defaultValue;
-	}
-	if (schema instanceof z.ZodDefault) {
-		const defaultValue = schema.def.defaultValue;
-		return typeof defaultValue === "function" ? defaultValue() : defaultValue;
-	}
-}
-/** Returns `true` when the schema allows the field to be absent at parse time. */
-function isFieldOptional(schema) {
-	const def = getZodDef(schema);
-	if (def?.type === "optional" || def?.type === "default") return true;
-	if (def?.type === "readonly" && def.innerType) return isFieldOptional(def.innerType);
-	if (schema instanceof z.ZodOptional) return true;
-	if (schema instanceof z.ZodDefault) return true;
-	if (schema instanceof z.ZodReadonly) return isFieldOptional(schema.def.innerType);
-	return false;
-}
 function simpleTypeToZod(type) {
 	switch (type) {
 		case "string": return z.string();
@@ -168,24 +146,16 @@ function getZodDef(schema) {
 	const schemaLike = schema;
 	return schemaLike.def ?? schemaLike._def ?? schemaLike._zod?.def;
 }
-function isZodSchema(value) {
-	if (value === null || typeof value !== "object") return false;
-	const candidate = value;
-	return typeof candidate.safeParse === "function" && (candidate.def !== void 0 || candidate._def !== void 0 || candidate._zod !== void 0);
-}
-/** Type guard: returns `true` when a config entry is a `FieldConfig` rather than a bare Zod schema or simple type. */
 function isFieldConfig(value) {
-	if (isZodSchema(value)) return false;
-	const type = value?.type;
-	return typeof value === "object" && value !== null && "type" in value && (isZodSchema(type) || isSimpleType(type));
+	if (value === null || typeof value !== "object") return false;
+	return value[FIELD_CONFIG_MARKER] === true;
 }
 /**
-* Analyses a user-provided config object (or `z.ZodObject`) and returns a
-* `SchemaDescriptor` containing per-field metadata and the raw Zod schemas.
+* Analyses a user-provided config object and returns the per-field metadata
+* needed to read external configuration sources.
 */
 function extractSchemaInfo(config) {
 	const fields = [];
-	const zodSchemas = {};
 	const entries = Object.entries(config);
 	for (const [key, value] of entries) {
 		let schema;
@@ -205,7 +175,6 @@ function extractSchemaInfo(config) {
 			secret = value.secret;
 		} else if (isSimpleType(value)) schema = simpleTypeToZod(value);
 		else schema = value;
-		zodSchemas[key] = schema;
 		const { type, enumValues } = inferFieldType(schema);
 		if (customConfigPath !== void 0) parseConfigLookupPath({
 			fieldName: key,
@@ -219,28 +188,11 @@ function extractSchemaInfo(config) {
 			cmdDescription: customCmdDescription,
 			configPath: customConfigPath,
 			type,
-			isOptional: isFieldOptional(schema),
-			defaultValue: extractDefaultValue(schema),
 			enumValues,
 			secret
 		});
 	}
-	return {
-		fields,
-		zodSchemas
-	};
-}
-/**
-* Extracts all default values from a Zod shape (the `.shape` property of a
-* `z.ZodObject`), returning them as a plain key/value record.
-*/
-function extractDefaults(shape) {
-	const defaults = {};
-	for (const [key, schema] of Object.entries(shape)) {
-		const defaultValue = extractDefaultValue(schema);
-		if (defaultValue !== void 0) defaults[key] = defaultValue;
-	}
-	return defaults;
+	return { fields };
 }
 /**
 * Converts a `ConfigInput` into a `z.ZodObject` suitable for final validation
@@ -619,8 +571,7 @@ function parseProcessEnvVariables(info) {
 }
 //#endregion
 //#region src/source-resolution/resolver.ts
-function resolveConfigSources(info, shape, options) {
-	const defaults = extractDefaults(shape);
+function resolveConfigSources(info, options) {
 	const rawArgv = options?.argv ?? hideBin(process.argv);
 	const configFileSource = resolveConfigFileSource(info, options?.configFile, rawArgv);
 	const envFileConfig = options?.envPath ? loadEnvFile(options.envPath) : loadEnvFile();
@@ -632,7 +583,6 @@ function resolveConfigSources(info, shape, options) {
 		...cliResult.rawValues
 	};
 	const config = {
-		...defaults,
 		...configFileSource.defaultConfigFile.config,
 		...envFileConfigValues,
 		...configFileSource.configFile.config,
@@ -680,9 +630,6 @@ function resolveConfigSources(info, shape, options) {
 		} else if (defaultConfigFileValue !== void 0) {
 			entry.finalSource = "defaultConfigFile";
 			entry.finalValue = defaultConfigFileValue.value;
-		} else {
-			const defaultValue = getPresentValueAsString(config, name);
-			if (defaultValue !== void 0) entry.finalValue = defaultValue;
 		}
 		sources[name] = entry;
 	}
@@ -812,7 +759,7 @@ function printConfiguredSources(configResult) {
 function configure(config, options) {
 	const info = extractSchemaInfo(config);
 	const schema = normalizeToZodObject(config);
-	const sourceResolution = resolveConfigSources(info, schema.shape, options);
+	const sourceResolution = resolveConfigSources(info, options);
 	const result = schema.safeParse(sourceResolution.config);
 	if (!result.success) {
 		const errors = result.error.issues.map((issue) => {
@@ -823,6 +770,10 @@ function configure(config, options) {
 		throw new Error(`Configuration validation failed: ${errors}`);
 	}
 	const data = result.data;
+	for (const [name, entry] of Object.entries(sourceResolution.sources)) {
+		if (entry.finalSource !== "default" || entry.finalValue !== void 0) continue;
+		entry.finalValue = getPresentValueAsString(data, name);
+	}
 	data.__$sources__ = sourceResolution.sources;
 	return data;
 }

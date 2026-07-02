@@ -1,5 +1,4 @@
 import { hideBin } from 'yargs/helpers';
-import type { z } from 'zod';
 import { parseExplicitCliArguments } from '../sources/cli/parser';
 import {
   resolveConfigFileSource,
@@ -8,12 +7,9 @@ import {
 import { parseEnvFileVariables } from '../sources/env-file/parser';
 import { loadEnvFile, type EnvFileConfig } from '../sources/env-file/loader';
 import { parseProcessEnvVariables } from '../sources/env-var/parser';
-import { extractDefaults, type SchemaDescriptor } from '../schema-transformer';
+import type { SchemaDescriptor } from '../schema-transformer';
 import type { ConfigSourceEntry } from './ledger';
-import {
-  getCliSourceName,
-  getPresentValueAsString,
-} from '../utils/source-values';
+import { getCliSourceName } from '../utils/source-values';
 
 export interface SourceResolverOptions {
   envPath?: string | string[];
@@ -28,10 +24,8 @@ export interface SourceResolution {
 
 export function resolveConfigSources(
   info: SchemaDescriptor,
-  shape: Record<string, z.ZodType>,
   options?: SourceResolverOptions
 ): SourceResolution {
-  const defaults = extractDefaults(shape);
   const rawArgv = options?.argv ?? hideBin(process.argv);
   const configFileSource = resolveConfigFileSource(
     info,
@@ -54,7 +48,6 @@ export function resolveConfigSources(
   };
 
   const config: Record<string, unknown> = {
-    ...defaults,
     ...configFileSource.defaultConfigFile.config,
     ...envFileConfigValues,
     ...configFileSource.configFile.config,
@@ -107,11 +100,6 @@ export function resolveConfigSources(
     } else if (defaultConfigFileValue !== undefined) {
       entry.finalSource = 'defaultConfigFile';
       entry.finalValue = defaultConfigFileValue.value;
-    } else {
-      const defaultValue = getPresentValueAsString(config, name);
-      if (defaultValue !== undefined) {
-        entry.finalValue = defaultValue;
-      }
     }
 
     sources[name] = entry;

@@ -3,7 +3,6 @@ import {
   toEnvName,
   toCliName,
   extractSchemaInfo,
-  extractDefaults,
   customConfigElement,
 } from '../src/schema-transformer';
 import { z } from 'zod';
@@ -50,28 +49,26 @@ describe('schema-transformer', () => {
         envName: 'PORT',
         cmdName: 'port',
         type: 'number',
-        isOptional: false,
       });
       expect(info.fields[1]).toMatchObject({
         name: 'host',
         envName: 'HOST',
         cmdName: 'host',
         type: 'string',
-        isOptional: false,
       });
     });
 
-    it('handles optional fields', () => {
+    it('infers primitive type through optional fields', () => {
       const schema = {
         port: z.number().optional(),
       };
 
       const info = extractSchemaInfo(schema);
 
-      expect(info.fields[0].isOptional).toBe(true);
+      expect(info.fields[0].type).toBe('number');
     });
 
-    it('handles fields with defaults', () => {
+    it('infers primitive type through fields with defaults', () => {
       const schema = {
         port: z.number().default(3000),
         host: z.string().default('localhost'),
@@ -79,10 +76,8 @@ describe('schema-transformer', () => {
 
       const info = extractSchemaInfo(schema);
 
-      expect(info.fields[0].isOptional).toBe(true);
-      expect(info.fields[0].defaultValue).toBe(3000);
-      expect(info.fields[1].isOptional).toBe(true);
-      expect(info.fields[1].defaultValue).toBe('localhost');
+      expect(info.fields[0].type).toBe('number');
+      expect(info.fields[1].type).toBe('string');
     });
 
     it('handles boolean fields', () => {
@@ -176,33 +171,6 @@ describe('schema-transformer', () => {
           }),
         })
       ).toThrow('empty middle segments');
-    });
-  });
-
-  describe('extractDefaults', () => {
-    it('extracts default values from schema', () => {
-      const schema = {
-        port: z.number().default(3000),
-        host: z.string().default('localhost'),
-      };
-
-      const defaults = extractDefaults(schema);
-
-      expect(defaults).toEqual({
-        port: 3000,
-        host: 'localhost',
-      });
-    });
-
-    it('returns empty object when no defaults', () => {
-      const schema = {
-        port: z.number(),
-        host: z.string(),
-      };
-
-      const defaults = extractDefaults(schema);
-
-      expect(defaults).toEqual({});
     });
   });
 });

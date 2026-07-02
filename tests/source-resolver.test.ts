@@ -2,10 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mkdirSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { z } from 'zod';
-import {
-  extractSchemaInfo,
-  normalizeToZodObject,
-} from '../src/schema-transformer';
+import { extractSchemaInfo } from '../src/schema-transformer';
 import { resolveConfigSources } from '../src/source-resolution/resolver';
 
 describe('source-resolver', () => {
@@ -32,7 +29,6 @@ describe('source-resolver', () => {
       debug: z.boolean(),
     };
     const info = extractSchemaInfo(config);
-    const schema = normalizeToZodObject(config);
 
     writeFileSync(
       defaultPath,
@@ -45,7 +41,7 @@ describe('source-resolver', () => {
     );
     process.env.HOST = 'env-host';
 
-    const result = resolveConfigSources(info, schema.shape, {
+    const result = resolveConfigSources(info, {
       configFile: defaultPath,
       envPath,
       argv: ['--config-file', explicitPath, '--port', '5000'],
