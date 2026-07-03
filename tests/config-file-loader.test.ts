@@ -111,6 +111,18 @@ describe('config-file-loader', () => {
     ).toEqual(['--port', '3000']);
   });
 
+  it('leaves disabled --config-file untouched after an argv terminator', () => {
+    expect(
+      stripDisabledConfigFileCliOption([
+        '--port',
+        '3000',
+        '--',
+        '--config-file',
+        'local.json',
+      ])
+    ).toEqual(['--port', '3000', '--', '--config-file', 'local.json']);
+  });
+
   it('loads JSON from relative paths without requiring a .json extension', () => {
     const filePath = join(testDir, 'konfuz.config');
     writeFileSync(filePath, '{"port":3000}');
@@ -121,6 +133,15 @@ describe('config-file-loader', () => {
 
     expect(loaded?.path).toBe('.temp-config-loader/konfuz.config');
     expect(loaded?.data).toEqual({ port: 3000 });
+  });
+
+  it('wraps non-ENOENT read errors with config file context', () => {
+    const directoryPath = join(testDir, 'directory');
+    mkdirSync(directoryPath);
+
+    expect(() => loadConfigFile(directoryPath, { required: true })).toThrow(
+      `Could not read JSON config file "${directoryPath}"`
+    );
   });
 
   it('silently ignores missing default files but throws for missing explicit files', () => {

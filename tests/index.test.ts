@@ -162,6 +162,21 @@ describe('configure', () => {
     });
   });
 
+  it('does not record a Zod default source for absent optional values', () => {
+    const config = configure({
+      konfuzTestOptionalName: z.string().optional(),
+    });
+
+    expect(config.konfuzTestOptionalName).toBeUndefined();
+    expect(config.__$sources__.konfuzTestOptionalName).toMatchObject({
+      finalSource: 'default',
+    });
+    expect(config.__$sources__.konfuzTestOptionalName.default).toBeUndefined();
+    expect(
+      config.__$sources__.konfuzTestOptionalName.finalValue
+    ).toBeUndefined();
+  });
+
   it('accepts simple string type instead of Zod schema', () => {
     process.env.KONFUZ_TEST_NAME = 'test-name';
 
@@ -1046,14 +1061,7 @@ describe('configure', () => {
         },
         {
           configFile: true,
-          argv: [
-            '--config-file',
-            sourcePath,
-            '--thing',
-            '12',
-            '--foo',
-            'ws',
-          ],
+          argv: ['--config-file', sourcePath, '--thing', '12', '--foo', 'ws'],
         }
       );
 

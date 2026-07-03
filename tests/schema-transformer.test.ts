@@ -4,8 +4,22 @@ import {
   toCliName,
   extractSchemaInfo,
   customConfigElement,
+  type ConfigSchemaType,
 } from '../src/schema-transformer';
 import { z } from 'zod';
+
+function legacyRuntimeSchema(
+  prototype: object,
+  trait: string,
+  extra: Record<string, unknown> = {}
+): ConfigSchemaType {
+  return Object.assign(Object.create(prototype) as Record<string, unknown>, {
+    _zod: { traits: new Set([trait]) },
+    safeParse: () => ({ success: true, data: undefined }),
+    '~standard': {},
+    ...extra,
+  }) as unknown as ConfigSchemaType;
+}
 
 describe('schema-transformer', () => {
   describe('toEnvName', () => {
@@ -99,6 +113,71 @@ describe('schema-transformer', () => {
 
       expect(info.fields[0].type).toBe('enum');
       expect(info.fields[0].enumValues).toEqual(['development', 'production']);
+    });
+
+    it('falls back to runtime Zod type checks when def metadata is unavailable', () => {
+      const legacyString = legacyRuntimeSchema(
+        z.ZodString.prototype,
+        'ZodString'
+      );
+      const legacyNumber = legacyRuntimeSchema(
+        z.ZodNumber.prototype,
+        'ZodNumber'
+      );
+      const legacyBoolean = legacyRuntimeSchema(
+        z.ZodBoolean.prototype,
+        'ZodBoolean'
+      );
+      const legacyEnum = legacyRuntimeSchema(z.ZodEnum.prototype, 'ZodEnum', {
+        options: ['dev', 'prod'],
+      });
+
+      const info = extractSchemaInfo({
+        legacyString,
+        legacyNumber,
+        legacyBoolean,
+        legacyEnum,
+        legacyDefault: legacyRuntimeSchema(
+          z.ZodDefault.prototype,
+          'ZodDefault',
+          { def: { innerType: legacyNumber } }
+        ),
+        legacyOptional: legacyRuntimeSchema(
+          z.ZodOptional.prototype,
+          'ZodOptional',
+          { def: { innerType: legacyBoolean } }
+        ),
+        legacyNullable: legacyRuntimeSchema(
+          z.ZodNullable.prototype,
+          'ZodNullable',
+          { def: { innerType: legacyString } }
+        ),
+        legacyReadonly: legacyRuntimeSchema(
+          z.ZodReadonly.prototype,
+          'ZodReadonly',
+          { def: { innerType: legacyEnum } }
+        ),
+        unknownWrapperWithoutInnerType: {
+          def: { type: 'optional' },
+          safeParse: () => ({ success: true, data: undefined }),
+          '~standard': {},
+        } as unknown as ConfigSchemaType,
+      });
+
+      const fields = Object.fromEntries(
+        info.fields.map((field) => [field.name, field])
+      );
+
+      expect(fields.legacyString.type).toBe('string');
+      expect(fields.legacyNumber.type).toBe('number');
+      expect(fields.legacyBoolean.type).toBe('boolean');
+      expect(fields.legacyEnum.type).toBe('enum');
+      expect(fields.legacyEnum.enumValues).toEqual(['dev', 'prod']);
+      expect(fields.legacyDefault.type).toBe('number');
+      expect(fields.legacyOptional.type).toBe('boolean');
+      expect(fields.legacyNullable.type).toBe('string');
+      expect(fields.legacyReadonly.type).toBe('enum');
+      expect(fields.unknownWrapperWithoutInnerType.type).toBe('string');
     });
 
     it('handles customConfigElement with envName', () => {

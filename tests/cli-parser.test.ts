@@ -3,7 +3,10 @@ import {
   parseCliArguments,
   parseExplicitCliArguments,
 } from '../src/sources/cli/parser';
-import { extractSchemaInfo } from '../src/schema-transformer';
+import {
+  customConfigElement,
+  extractSchemaInfo,
+} from '../src/schema-transformer';
 import { z } from 'zod';
 
 describe('cli-parser', () => {
@@ -117,6 +120,41 @@ describe('cli-parser', () => {
       config: { host: 'example.com' },
       rawValues: {},
       sourceValues: { host: 'example.com' },
+    });
+  });
+
+  it('applies enum choices and descriptions to configured CLI options', () => {
+    const info = extractSchemaInfo({
+      mode: customConfigElement({
+        type: z.enum(['dev', 'prod']),
+        cmdDescription: 'Runtime mode',
+      }),
+    });
+
+    const result = parseExplicitCliArguments(info, {
+      argv: ['--mode', 'prod'],
+    });
+
+    expect(result).toEqual({
+      config: { mode: 'prod' },
+      rawValues: {},
+      sourceValues: { mode: 'prod' },
+    });
+  });
+
+  it('returns invalid boolean strings as raw values from the legacy parser', () => {
+    const info = extractSchemaInfo({
+      enabled: z.boolean(),
+    });
+
+    const result = parseCliArguments(info, {
+      argv: ['--enabled', 'maybe'],
+    });
+
+    expect(result).toEqual({
+      config: {},
+      rawValues: { enabled: 'maybe' },
+      sourceValues: {},
     });
   });
 });

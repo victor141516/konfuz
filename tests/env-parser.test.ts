@@ -128,4 +128,28 @@ describe('env-parser', () => {
 
     expect(config.konfuzTestPort).toBe(4000);
   });
+
+  it('keeps invalid enum values so final schema validation can reject them', () => {
+    const info = extractSchemaInfo({
+      konfuzTestMode: z.enum(['dev', 'prod']),
+    });
+
+    const config = parseEnvFileVariables(info, {
+      KONFUZ_TEST_MODE: 'staging',
+    });
+
+    expect(config.konfuzTestMode).toBe('staging');
+  });
+
+  it('ignores env file keys whose value is undefined', () => {
+    const info = extractSchemaInfo({
+      konfuzTestPort: z.number(),
+    });
+
+    const config = parseEnvFileVariables(info, {
+      KONFUZ_TEST_PORT: undefined as unknown as string,
+    });
+
+    expect(config).toEqual({});
+  });
 });
