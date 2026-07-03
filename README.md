@@ -1,5 +1,7 @@
 # konfuz
 
+![konfuz turns scattered configuration sources into one typed config](assets/konfuz-presentation-illustrations/01-typed-config-sorter.png)
+
 **Configuration management for NPM applications made simple** ⚙️
 
 A zero-boilerplate configuration library that reads from JSON config files, `.env` files, environment variables, and CLI arguments with full type safety using Zod schemas.
