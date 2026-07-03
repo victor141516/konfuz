@@ -24,14 +24,14 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 let zod = require("zod");
 let yargs_helpers = require("yargs/helpers");
 let yargs = require("yargs");
-yargs = __toESM(yargs);
+yargs = __toESM(yargs, 1);
 let change_case = require("change-case");
-change_case = __toESM(change_case);
+change_case = __toESM(change_case, 1);
 let fs = require("fs");
 let path = require("path");
 let dotenv = require("dotenv");
 let table = require("table");
-table = __toESM(table);
+table = __toESM(table, 1);
 //#region src/utils/json.ts
 function isJsonObject(value) {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
