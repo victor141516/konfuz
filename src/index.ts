@@ -1,9 +1,10 @@
-import { z } from 'zod';
 import {
   extractSchemaInfo,
   normalizeToZodObject,
   customConfigElement,
+  type ConfigSchemaType,
   type FieldConfig,
+  type InferSchemaOutput,
   type ConfigInput,
   type SimpleType,
   type ConfigFieldType,
@@ -15,17 +16,17 @@ import {
 import type { InternalSources } from './source-resolution/ledger';
 import { getPresentValueAsString } from './utils/source-values';
 
-export interface ParseMyConfOptions extends SourceResolverOptions {}
+export interface ConfigureOptions extends SourceResolverOptions {}
 
 export { customConfigElement };
 export type { SimpleType, ConfigFieldType };
 
 export type InferConfig<T extends ConfigInput> = {
-  [K in keyof T]: T[K] extends z.ZodTypeAny
-    ? z.infer<T[K]>
+  [K in keyof T]: T[K] extends ConfigSchemaType
+    ? InferSchemaOutput<T[K]>
     : T[K] extends FieldConfig
-      ? T[K]['type'] extends z.ZodTypeAny
-        ? z.infer<T[K]['type']>
+      ? T[K]['type'] extends ConfigSchemaType
+        ? InferSchemaOutput<T[K]['type']>
         : T[K]['type'] extends SimpleType
           ? SimpleToNative<T[K]['type']>
           : never
@@ -50,12 +51,11 @@ export type {
 
 export function configure<T extends ConfigInput>(
   config: T,
-  options?: ParseMyConfOptions
+  options?: ConfigureOptions
 ): InferConfig<T> & InternalSources {
   const info = extractSchemaInfo(config as ConfigInput);
 
-  const schema: z.ZodObject<Record<string, z.ZodTypeAny>> =
-    normalizeToZodObject(config as ConfigInput);
+  const schema = normalizeToZodObject(config as ConfigInput);
 
   const sourceResolution = resolveConfigSources(info, options);
 
@@ -80,7 +80,13 @@ export function configure<T extends ConfigInput>(
       continue;
     }
 
-    entry.finalValue = getPresentValueAsString(data, name);
+    const defaultValue = getPresentValueAsString(data, name);
+    if (defaultValue === undefined) {
+      continue;
+    }
+
+    entry.default = { name: 'zod', value: defaultValue };
+    entry.finalValue = defaultValue;
   }
 
   data.__$sources__ = sourceResolution.sources;

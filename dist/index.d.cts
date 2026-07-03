@@ -1,24 +1,19 @@
-import { z } from "zod";
-
 //#region src/schema-transformer.d.ts
-/** The four core primitive Zod types the library can coerce from strings. */
-type ZodCoreTypes = z.ZodString | z.ZodNumber | z.ZodBoolean | z.ZodEnum;
+type StandardSchemaOutput = string | number | boolean | null | undefined;
 /**
- * Modifier wrappers that may legally surround a supported core type:
- * `.default()`, `.optional()`, `.nullable()`, `.readonly()`.
+ * Structural schema shape used for public typing.
+ * Avoids binding consumers to the exact Zod minor version used to build konfuz.
  */
-type ZodModifier<T extends z.ZodTypeAny> = z.ZodDefault<T> | z.ZodOptional<T> | z.ZodNullable<T> | z.ZodReadonly<T>;
-/**
- * A Zod schema accepted by this library: one of the four supported primitives
- * (`string`, `number`, `boolean`, `enum`), optionally wrapped any number of
- * times by `.default()`, `.optional()`, `.nullable()`, or `.readonly()`.
- *
- * Up to four levels of wrapping are supported, which covers every realistic
- * use-case (e.g. `z.number().default(0).nullable().optional()` is valid).
- * Unsupported types such as `z.date()` or `z.array(z.string())` are rejected
- * at the TypeScript level.
- */
-type SupportedZodTypes = ZodCoreTypes | ZodModifier<ZodCoreTypes> | ZodModifier<ZodModifier<ZodCoreTypes>> | ZodModifier<ZodModifier<ZodModifier<ZodCoreTypes>>> | ZodModifier<ZodModifier<ZodModifier<ZodModifier<ZodCoreTypes>>>>;
+interface ConfigSchemaType<Output = StandardSchemaOutput> {
+  readonly '~standard': {
+    readonly types?: {
+      readonly output: Output;
+    } | undefined;
+  };
+  safeParse: (value: unknown, ...args: never[]) => unknown;
+}
+type SupportedZodTypes = ConfigSchemaType<StandardSchemaOutput>;
+type InferSchemaOutput<T> = T extends ConfigSchemaType<infer Output> ? Output : never;
 type SimpleType = 'string' | 'number' | 'boolean';
 type ConfigFieldType = SupportedZodTypes | SimpleType;
 /**
@@ -57,7 +52,7 @@ type ConfigInput = Record<string, ConfigFieldType | FieldConfig>;
  * @example
  * customConfigElement({ type: z.number(), envName: 'SERVER_PORT', cmdNameShort: 'p' })
  */
-declare function customConfigElement<T extends SupportedZodTypes>(options: {
+declare function customConfigElement<T extends ConfigFieldType>(options: {
   type: T;
   envName?: string;
   cmdName?: string;
@@ -85,6 +80,7 @@ interface SourceValue {
 interface ConfigSourceEntry {
   finalSource: ConfigSource;
   finalValue?: string;
+  default?: SourceValue;
   defaultConfigFile?: SourceValue;
   envFile?: SourceValue;
   configFile?: SourceValue;
@@ -107,9 +103,9 @@ interface SourceResolverOptions {
 declare function printConfiguredSources(configResult: unknown): void;
 //#endregion
 //#region src/index.d.ts
-interface ParseMyConfOptions extends SourceResolverOptions {}
-type InferConfig<T extends ConfigInput> = { [K in keyof T]: T[K] extends z.ZodTypeAny ? z.infer<T[K]> : T[K] extends FieldConfig ? T[K]['type'] extends z.ZodTypeAny ? z.infer<T[K]['type']> : T[K]['type'] extends SimpleType ? SimpleToNative<T[K]['type']> : never : T[K] extends SimpleType ? SimpleToNative<T[K]> : never };
+interface ConfigureOptions extends SourceResolverOptions {}
+type InferConfig<T extends ConfigInput> = { [K in keyof T]: T[K] extends ConfigSchemaType ? InferSchemaOutput<T[K]> : T[K] extends FieldConfig ? T[K]['type'] extends ConfigSchemaType ? InferSchemaOutput<T[K]['type']> : T[K]['type'] extends SimpleType ? SimpleToNative<T[K]['type']> : never : T[K] extends SimpleType ? SimpleToNative<T[K]> : never };
 type SimpleToNative<T extends SimpleType> = T extends 'string' ? string : T extends 'number' ? number : T extends 'boolean' ? boolean : never;
-declare function configure<T extends ConfigInput>(config: T, options?: ParseMyConfOptions): InferConfig<T> & InternalSources;
+declare function configure<T extends ConfigInput>(config: T, options?: ConfigureOptions): InferConfig<T> & InternalSources;
 //#endregion
-export { type ConfigFieldType, type ConfigSource, type ConfigSourceEntry, InferConfig, ParseMyConfOptions, type SimpleType, type SourceValue, configure, customConfigElement, printConfiguredSources, toCliName, toEnvName };
+export { type ConfigFieldType, type ConfigSource, type ConfigSourceEntry, ConfigureOptions, InferConfig, type SimpleType, type SourceValue, configure, customConfigElement, printConfiguredSources, toCliName, toEnvName };

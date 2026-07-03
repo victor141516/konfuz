@@ -14,6 +14,7 @@ export interface SourceValue {
 export interface ConfigSourceEntry {
   finalSource: ConfigSource;
   finalValue?: string;
+  default?: SourceValue;
   defaultConfigFile?: SourceValue;
   envFile?: SourceValue;
   configFile?: SourceValue;
@@ -27,6 +28,7 @@ export interface InternalSources {
 }
 
 export type SourceValueKey =
+  | 'default'
   | 'defaultConfigFile'
   | 'envFile'
   | 'configFile'
@@ -34,16 +36,22 @@ export type SourceValueKey =
   | 'cli';
 
 export interface SourceLedgerColumn {
-  source: Exclude<ConfigSource, 'default'>;
+  source: ConfigSource;
   key: SourceValueKey;
   label: string;
   width: number;
 }
 
 export const SOURCE_PRIORITY_LABEL =
-  'CLI > Environment > JSON file > .env file > Default JSON > default';
+  'CLI > Environment > JSON file > .env file > Default JSON > Zod default';
 
 export const SOURCE_LEDGER_COLUMNS: SourceLedgerColumn[] = [
+  {
+    source: 'default',
+    key: 'default',
+    label: 'Zod default',
+    width: 30,
+  },
   {
     source: 'defaultConfigFile',
     key: 'defaultConfigFile',

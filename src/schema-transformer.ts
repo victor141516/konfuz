@@ -41,35 +41,46 @@ export interface SchemaDescriptor {
   fields: FieldDescriptor[];
 }
 
-/** The four core primitive Zod types the library can coerce from strings. */
-type ZodCoreTypes = z.ZodString | z.ZodNumber | z.ZodBoolean | z.ZodEnum;
+interface ConfigValidationIssue {
+  path: PropertyKey[];
+  message: string;
+}
+
+type ConfigValidationResult =
+  | { success: true; data: Record<string, unknown> }
+  | { success: false; error: { issues: ConfigValidationIssue[] } };
+
+export interface ConfigValidationSchema {
+  safeParse: (value: unknown) => ConfigValidationResult;
+}
+
+type StandardSchemaOutput =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined;
 
 /**
- * Modifier wrappers that may legally surround a supported core type:
- * `.default()`, `.optional()`, `.nullable()`, `.readonly()`.
+ * Structural schema shape used for public typing.
+ * Avoids binding consumers to the exact Zod minor version used to build konfuz.
  */
-type ZodModifier<T extends z.ZodTypeAny> =
-  | z.ZodDefault<T>
-  | z.ZodOptional<T>
-  | z.ZodNullable<T>
-  | z.ZodReadonly<T>;
+export interface ConfigSchemaType<Output = StandardSchemaOutput> {
+  readonly '~standard': {
+    readonly types?:
+      | {
+          readonly output: Output;
+        }
+      | undefined;
+  };
+  safeParse: (value: unknown, ...args: never[]) => unknown;
+}
 
-/**
- * A Zod schema accepted by this library: one of the four supported primitives
- * (`string`, `number`, `boolean`, `enum`), optionally wrapped any number of
- * times by `.default()`, `.optional()`, `.nullable()`, or `.readonly()`.
- *
- * Up to four levels of wrapping are supported, which covers every realistic
- * use-case (e.g. `z.number().default(0).nullable().optional()` is valid).
- * Unsupported types such as `z.date()` or `z.array(z.string())` are rejected
- * at the TypeScript level.
- */
-export type SupportedZodTypes =
-  | ZodCoreTypes
-  | ZodModifier<ZodCoreTypes>
-  | ZodModifier<ZodModifier<ZodCoreTypes>>
-  | ZodModifier<ZodModifier<ZodModifier<ZodCoreTypes>>>
-  | ZodModifier<ZodModifier<ZodModifier<ZodModifier<ZodCoreTypes>>>>;
+export type SupportedZodTypes = ConfigSchemaType<StandardSchemaOutput>;
+
+export type InferSchemaOutput<T> = T extends ConfigSchemaType<infer Output>
+  ? Output
+  : never;
 
 export type SimpleType = 'string' | 'number' | 'boolean';
 
@@ -111,10 +122,10 @@ export type ConfigInput = Record<string, ConfigFieldType | FieldConfig>;
 
 type ZodDefLike = {
   type?: string;
-  innerType?: z.ZodType;
+  innerType?: ConfigSchemaType;
 };
 
-type ZodSchemaLike = z.ZodType & {
+type ZodSchemaLike = ConfigSchemaType & {
   def?: ZodDefLike;
   _def?: ZodDefLike;
   _zod?: { def?: ZodDefLike };
@@ -131,7 +142,7 @@ type ZodSchemaLike = z.ZodType & {
  * @example
  * customConfigElement({ type: z.number(), envName: 'SERVER_PORT', cmdNameShort: 'p' })
  */
-export function customConfigElement<T extends SupportedZodTypes>(options: {
+export function customConfigElement<T extends ConfigFieldType>(options: {
   type: T;
   envName?: string;
   cmdName?: string;
@@ -175,7 +186,7 @@ export function toCliName(key: string): string {
 // ---------------------------------------------------------------------------
 
 /** Unwraps Zod wrapper types (Default, Optional, Nullable, Readonly) to determine the core FieldType. */
-function inferFieldType(schema: z.ZodType): {
+function inferFieldType(schema: ConfigSchemaType): {
   type: FieldType;
   enumValues?: string[];
 } {
@@ -202,19 +213,28 @@ function inferFieldType(schema: z.ZodType): {
       break;
   }
 
-  if (schema instanceof z.ZodString) return { type: 'string' };
-  if (schema instanceof z.ZodNumber) return { type: 'number' };
-  if (schema instanceof z.ZodBoolean) return { type: 'boolean' };
-  if (schema instanceof z.ZodEnum)
-    return { type: 'enum', enumValues: schema.options as string[] };
-  if (schema instanceof z.ZodDefault)
-    return inferFieldType(schema.def.innerType as z.ZodType);
-  if (schema instanceof z.ZodOptional)
-    return inferFieldType(schema.def.innerType as z.ZodType);
-  if (schema instanceof z.ZodNullable)
-    return inferFieldType(schema.def.innerType as z.ZodType);
-  if (schema instanceof z.ZodReadonly)
-    return inferFieldType(schema.def.innerType as z.ZodType);
+  const runtimeSchema = schema as unknown as z.ZodType;
+  if (runtimeSchema instanceof z.ZodString) return { type: 'string' };
+  if (runtimeSchema instanceof z.ZodNumber) return { type: 'number' };
+  if (runtimeSchema instanceof z.ZodBoolean) return { type: 'boolean' };
+  if (runtimeSchema instanceof z.ZodEnum)
+    return { type: 'enum', enumValues: runtimeSchema.options as string[] };
+  if (runtimeSchema instanceof z.ZodDefault)
+    return inferFieldType(
+      runtimeSchema.def.innerType as unknown as ConfigSchemaType
+    );
+  if (runtimeSchema instanceof z.ZodOptional)
+    return inferFieldType(
+      runtimeSchema.def.innerType as unknown as ConfigSchemaType
+    );
+  if (runtimeSchema instanceof z.ZodNullable)
+    return inferFieldType(
+      runtimeSchema.def.innerType as unknown as ConfigSchemaType
+    );
+  if (runtimeSchema instanceof z.ZodReadonly)
+    return inferFieldType(
+      runtimeSchema.def.innerType as unknown as ConfigSchemaType
+    );
   return { type: 'string' };
 }
 
@@ -235,9 +255,13 @@ function isSimpleType(value: unknown): value is SimpleType {
   );
 }
 
-function getZodDef(schema: z.ZodType): ZodDefLike | undefined {
+function getZodDef(schema: ConfigSchemaType): ZodDefLike | undefined {
   const schemaLike = schema as ZodSchemaLike;
   return schemaLike.def ?? schemaLike._def ?? schemaLike._zod?.def;
+}
+
+function toRuntimeZodSchema(schema: ConfigSchemaType): z.ZodTypeAny {
+  return schema as unknown as z.ZodTypeAny;
 }
 
 function isFieldConfig(
@@ -267,7 +291,7 @@ export function extractSchemaInfo(config: ConfigInput): SchemaDescriptor {
   ][];
 
   for (const [key, value] of entries) {
-    let schema: z.ZodType;
+    let schema: ConfigSchemaType;
     let customEnvName: string | undefined;
     let customCmdName: string | undefined;
     let customCmdNameShort: string | undefined;
@@ -323,20 +347,20 @@ export function extractSchemaInfo(config: ConfigInput): SchemaDescriptor {
  */
 export function normalizeToZodObject<T extends ConfigInput>(
   config: T
-): z.ZodObject<Record<string, SupportedZodTypes>> {
-  const shape: Record<string, SupportedZodTypes> = {};
+): ConfigValidationSchema {
+  const shape: Record<string, z.ZodTypeAny> = {};
 
   for (const [key, value] of Object.entries(config)) {
     if (isFieldConfig(value)) {
       shape[key] = isSimpleType(value.type)
-        ? simpleTypeToZod(value.type)
-        : value.type;
+        ? toRuntimeZodSchema(simpleTypeToZod(value.type))
+        : toRuntimeZodSchema(value.type);
     } else if (isSimpleType(value)) {
-      shape[key] = simpleTypeToZod(value);
+      shape[key] = toRuntimeZodSchema(simpleTypeToZod(value));
     } else {
-      shape[key] = value;
+      shape[key] = toRuntimeZodSchema(value);
     }
   }
 
-  return z.object(shape);
+  return z.object(shape) as unknown as ConfigValidationSchema;
 }

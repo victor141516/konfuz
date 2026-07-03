@@ -96,7 +96,7 @@ Values are merged in this order (highest priority wins):
 5. **Default JSON file** configured with `options.configFile`
 6. **Default values** (from Zod `.default()`)
 
-![Configuration source priority](assets/konfuz-config-priority-illustrations/01-priority-order.png)
+![Configuration source priority](assets/konfuz-config-priority-illustrations/01-priority-order.jpg)
 
 ```bash
 # CLI takes precedence over env vars
@@ -275,15 +275,15 @@ printConfiguredSources(config);
 Output:
 
 ```text
-[konfuz] Configuration sources (priority: CLI > Environment > JSON file > .env file > Default JSON > default)
+[konfuz] Configuration sources (priority: CLI > Environment > JSON file > .env file > Default JSON > Zod default)
 
-╔══════════════════════╤════════════════════════════════╤════════════════════════════════╤════════════════════════════════╤════════════════════════════════╤════════════════════════════════╤══════════════════════╗
-║ Field                │ Default JSON                   │ .env file                      │ JSON file                      │ Environment                    │ CLI                            │ Final value          ║
-╟──────────────────────┼────────────────────────────────┼────────────────────────────────┼────────────────────────────────┼────────────────────────────────┼────────────────────────────────┼──────────────────────╢
-║ host                 │ -                              │ -                              │ -                              │ -                              │ -                              │ localhost            ║
-╟──────────────────────┼────────────────────────────────┼────────────────────────────────┼────────────────────────────────┼────────────────────────────────┼────────────────────────────────┼──────────────────────╢
-║ port                 │ -                              │ -                              │ -                              │ -                              │ --port=3000                    │ 3000                 ║
-╚══════════════════════╧════════════════════════════════╧════════════════════════════════╧════════════════════════════════╧════════════════════════════════╧════════════════════════════════╧══════════════════════╝
+╔══════════════════════╤════════════════════════════════╤════════════════════════════════╤════════════════════════════════╤════════════════════════════════╤════════════════════════════════╤════════════════════════════════╤══════════════════════╗
+║ Field                │ Zod default                    │ Default JSON                   │ .env file                      │ JSON file                      │ Environment                    │ CLI                            │ Final value          ║
+╟──────────────────────┼────────────────────────────────┼────────────────────────────────┼────────────────────────────────┼────────────────────────────────┼────────────────────────────────┼────────────────────────────────┼──────────────────────╢
+║ host                 │ zod=localhost                  │ -                              │ -                              │ -                              │ -                              │ -                              │ localhost            ║
+╟──────────────────────┼────────────────────────────────┼────────────────────────────────┼────────────────────────────────┼────────────────────────────────┼────────────────────────────────┼────────────────────────────────┼──────────────────────╢
+║ port                 │ zod=3000                       │ -                              │ -                              │ -                              │ -                              │ --port=3000                    │ 3000                 ║
+╚══════════════════════╧════════════════════════════════╧════════════════════════════════╧════════════════════════════════╧════════════════════════════════╧════════════════════════════════╧════════════════════════════════╧══════════════════════╝
 ```
 
 **`ConfigSourceEntry` structure:**
@@ -292,6 +292,7 @@ Output:
 | ------------------- | --------------------------------------------------------------------------------- | ------------------------------------- |
 | `finalSource`       | `'cli' \| 'env' \| 'configFile' \| 'envFile' \| 'defaultConfigFile' \| 'default'` | Where the final value came from       |
 | `finalValue`        | `string \| undefined`                                                             | The resolved value as a string        |
+| `default`           | `{ name: string, value: string } \| undefined`                                    | Value from Zod `.default()`           |
 | `defaultConfigFile` | `{ name: string, value: string } \| undefined`                                    | Value from configured default JSON    |
 | `envFile`           | `{ name: string, value: string } \| undefined`                                    | Value from `.env` file                |
 | `configFile`        | `{ name: string, value: string } \| undefined`                                    | Value from explicit JSON file         |
@@ -380,7 +381,7 @@ node app.js --port 8080 --debug
 
 ## 📄 API Reference
 
-### `configure<T extends ConfigInput>(config: T, options?: ParseMyConfOptions): InferConfig<T> & { __$sources__: Record<string, ConfigSourceEntry> }`
+### `configure<T extends ConfigInput>(config: T, options?: ConfigureOptions): InferConfig<T> & { __$sources__: Record<string, ConfigSourceEntry> }`
 
 Main function to configure and parse application configuration.
 

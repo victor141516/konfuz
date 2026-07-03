@@ -115,17 +115,18 @@ function inferFieldType(schema) {
 			if (def.innerType) return inferFieldType(def.innerType);
 			break;
 	}
-	if (schema instanceof z.ZodString) return { type: "string" };
-	if (schema instanceof z.ZodNumber) return { type: "number" };
-	if (schema instanceof z.ZodBoolean) return { type: "boolean" };
-	if (schema instanceof z.ZodEnum) return {
+	const runtimeSchema = schema;
+	if (runtimeSchema instanceof z.ZodString) return { type: "string" };
+	if (runtimeSchema instanceof z.ZodNumber) return { type: "number" };
+	if (runtimeSchema instanceof z.ZodBoolean) return { type: "boolean" };
+	if (runtimeSchema instanceof z.ZodEnum) return {
 		type: "enum",
-		enumValues: schema.options
+		enumValues: runtimeSchema.options
 	};
-	if (schema instanceof z.ZodDefault) return inferFieldType(schema.def.innerType);
-	if (schema instanceof z.ZodOptional) return inferFieldType(schema.def.innerType);
-	if (schema instanceof z.ZodNullable) return inferFieldType(schema.def.innerType);
-	if (schema instanceof z.ZodReadonly) return inferFieldType(schema.def.innerType);
+	if (runtimeSchema instanceof z.ZodDefault) return inferFieldType(runtimeSchema.def.innerType);
+	if (runtimeSchema instanceof z.ZodOptional) return inferFieldType(runtimeSchema.def.innerType);
+	if (runtimeSchema instanceof z.ZodNullable) return inferFieldType(runtimeSchema.def.innerType);
+	if (runtimeSchema instanceof z.ZodReadonly) return inferFieldType(runtimeSchema.def.innerType);
 	return { type: "string" };
 }
 function simpleTypeToZod(type) {
@@ -145,6 +146,9 @@ function isSimpleType(value) {
 function getZodDef(schema) {
 	const schemaLike = schema;
 	return schemaLike.def ?? schemaLike._def ?? schemaLike._zod?.def;
+}
+function toRuntimeZodSchema(schema) {
+	return schema;
 }
 function isFieldConfig(value) {
 	if (value === null || typeof value !== "object") return false;
@@ -200,9 +204,9 @@ function extractSchemaInfo(config) {
 */
 function normalizeToZodObject(config) {
 	const shape = {};
-	for (const [key, value] of Object.entries(config)) if (isFieldConfig(value)) shape[key] = isSimpleType(value.type) ? simpleTypeToZod(value.type) : value.type;
-	else if (isSimpleType(value)) shape[key] = simpleTypeToZod(value);
-	else shape[key] = value;
+	for (const [key, value] of Object.entries(config)) if (isFieldConfig(value)) shape[key] = isSimpleType(value.type) ? toRuntimeZodSchema(simpleTypeToZod(value.type)) : toRuntimeZodSchema(value.type);
+	else if (isSimpleType(value)) shape[key] = toRuntimeZodSchema(simpleTypeToZod(value));
+	else shape[key] = toRuntimeZodSchema(value);
 	return z.object(shape);
 }
 //#endregion
@@ -640,8 +644,14 @@ function resolveConfigSources(info, options) {
 }
 //#endregion
 //#region src/source-resolution/ledger.ts
-const SOURCE_PRIORITY_LABEL = "CLI > Environment > JSON file > .env file > Default JSON > default";
+const SOURCE_PRIORITY_LABEL = "CLI > Environment > JSON file > .env file > Default JSON > Zod default";
 const SOURCE_LEDGER_COLUMNS = [
+	{
+		source: "default",
+		key: "default",
+		label: "Zod default",
+		width: 30
+	},
 	{
 		source: "defaultConfigFile",
 		key: "defaultConfigFile",
@@ -739,18 +749,9 @@ function printConfiguredSources(configResult) {
 	}
 	console.log(`[konfuz] Configuration sources (priority: ${SOURCE_PRIORITY_LABEL})\n`);
 	const columns = Object.fromEntries([
-		[0, {
-			width: 20,
-			truncate: 20
-		}],
-		...SOURCE_LEDGER_COLUMNS.map((column, index) => [index + 1, {
-			width: column.width,
-			truncate: column.width
-		}]),
-		[SOURCE_LEDGER_COLUMNS.length + 1, {
-			width: 20,
-			truncate: 20
-		}]
+		[0, { width: 20 }],
+		...SOURCE_LEDGER_COLUMNS.map((column, index) => [index + 1, { width: column.width }]),
+		[SOURCE_LEDGER_COLUMNS.length + 1, { width: 20 }]
 	]);
 	console.log(table.table(tableData, { columns }));
 }
@@ -772,7 +773,13 @@ function configure(config, options) {
 	const data = result.data;
 	for (const [name, entry] of Object.entries(sourceResolution.sources)) {
 		if (entry.finalSource !== "default" || entry.finalValue !== void 0) continue;
-		entry.finalValue = getPresentValueAsString(data, name);
+		const defaultValue = getPresentValueAsString(data, name);
+		if (defaultValue === void 0) continue;
+		entry.default = {
+			name: "zod",
+			value: defaultValue
+		};
+		entry.finalValue = defaultValue;
 	}
 	data.__$sources__ = sourceResolution.sources;
 	return data;

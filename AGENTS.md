@@ -106,7 +106,7 @@ Only the following are exported from `src/index.ts`:
 - `customConfigElement()` - For custom env/CLI names
 - `toEnvName()` - Utility for key → env name conversion
 - `toCliName()` - Utility for key → CLI name conversion
-- Types: `ParseMyConfOptions`, `CustomConfigElement`
+- Types: `ConfigureOptions`, `CustomConfigElement`
 
 Internal modules (`loader.ts`, `env-parser.ts`, etc.) are not exported.
 
@@ -153,7 +153,7 @@ Use `vi.resetModules()` when mocking process.env or process.argv in tests.
 
 ## API Reference
 
-### configure<T extends ConfigShape>(config: T, options?: ParseMyConfOptions): InferConfig<T>
+### configure<T extends ConfigShape>(config: T, options?: ConfigureOptions): InferConfig<T>
 
 Main function to configure and parse application configuration.
 

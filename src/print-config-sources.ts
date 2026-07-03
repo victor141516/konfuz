@@ -115,12 +115,12 @@ export function printConfiguredSources(configResult: unknown): void {
     `[konfuz] Configuration sources (priority: ${SOURCE_PRIORITY_LABEL})\n`
   );
   const columns = Object.fromEntries([
-    [0, { width: 20, truncate: 20 }],
+    [0, { width: 20 }],
     ...SOURCE_LEDGER_COLUMNS.map((column, index) => [
       index + 1,
-      { width: column.width, truncate: column.width },
+      { width: column.width },
     ]),
-    [SOURCE_LEDGER_COLUMNS.length + 1, { width: 20, truncate: 20 }],
+    [SOURCE_LEDGER_COLUMNS.length + 1, { width: 20 }],
   ]);
 
   console.log(

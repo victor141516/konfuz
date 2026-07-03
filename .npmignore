@@ -1,0 +1,8 @@
+node_modules
+src/zzzz.ts
+tsconfig.tsbuildinfo
+coverage
+.kilo
+.temp
+ztest
+assets/konfuz-config-priority-illustrations/01-priority-order.jpg

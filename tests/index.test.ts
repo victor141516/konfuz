@@ -156,6 +156,10 @@ describe('configure', () => {
       Record<string, ConfigSourceEntry>
     >();
     expect(config.__$sources__.konfuzTestPort.finalSource).toBe('default');
+    expect(config.__$sources__.konfuzTestPort.default).toEqual({
+      name: 'zod',
+      value: '3000',
+    });
   });
 
   it('accepts simple string type instead of Zod schema', () => {
@@ -1002,6 +1006,7 @@ describe('configure', () => {
       printConfiguredSources(config);
 
       const output = log.mock.calls.flat().join('\n');
+      expect(output).toContain('Zod default');
       expect(output).toContain('Default JSON');
       expect(output).toContain('JSON file');
       expect(output).toContain('***');
@@ -1023,6 +1028,42 @@ describe('configure', () => {
           }
         )
       ).toThrow(/apiKey: \*\*\*/);
+    });
+
+    it('does not truncate ANSI styling while printing inactive source values', () => {
+      const sourcePath = 'print-sources.json';
+      writeFileSync(
+        join(process.cwd(), sourcePath),
+        '{"port":4,"foo":"qweqeqw"}'
+      );
+      const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+
+      const config = configure(
+        {
+          port: z.number(),
+          thing: z.number(),
+          foo: z.string(),
+        },
+        {
+          configFile: true,
+          argv: [
+            '--config-file',
+            sourcePath,
+            '--thing',
+            '12',
+            '--foo',
+            'ws',
+          ],
+        }
+      );
+
+      printConfiguredSources(config);
+
+      const output = log.mock.calls.flat().join('\n');
+      expect(output).toContain('print-sources.json:.foo=');
+      expect(output).toContain('--foo=ws');
+      expect(output).not.toContain('…');
+      expect(output).not.toContain('\x1b…');
     });
   });
 
