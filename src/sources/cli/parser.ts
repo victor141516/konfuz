@@ -1,7 +1,9 @@
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
-import { SchemaDescriptor } from './schema-transformer';
+import { coerceCliBooleanValue } from '../../utils/primitive-values';
+import { SchemaDescriptor } from '../../schema-transformer';
 import { globalGenerator } from './short-param';
+import { toSourceValue } from '../../utils/source-values';
 
 export interface CliConfig {
   [key: string]: string | number | boolean | undefined;
@@ -10,41 +12,21 @@ export interface CliConfig {
 export interface CliParseResult {
   config: CliConfig;
   rawValues: Record<string, string>;
+  sourceValues: Record<string, string>;
 }
 
-const BOOLEAN_TRUE_VALUES = new Set(['1', 'true', 'yes']);
-const BOOLEAN_FALSE_VALUES = new Set(['0', 'false', 'no']);
-
-function coerceBooleanValue(value: string | boolean): boolean | undefined {
-  if (typeof value === 'boolean') {
-    return false;
-  }
-  if (value === '') {
-    return true;
-  }
-  const lower = value.toLowerCase();
-  if (BOOLEAN_TRUE_VALUES.has(lower)) return true;
-  if (BOOLEAN_FALSE_VALUES.has(lower)) return false;
-  return undefined;
-}
-
-export function parseCliArguments(
+function parseConfiguredCliArguments(
   info: SchemaDescriptor,
-  options?: { argv?: string[] }
-): CliConfig | CliParseResult {
-  const argv = options?.argv ?? hideBin(process.argv);
+  argv: string[]
+): CliParseResult {
   const config: CliConfig = {};
   const rawValues: Record<string, string> = {};
+  const sourceValues: Record<string, string> = {};
 
   globalGenerator.reset();
 
   if (argv.length === 0) {
-    for (const field of info.fields) {
-      if (field.defaultValue !== undefined) {
-        config[field.name] = field.defaultValue as string | number | boolean;
-      }
-    }
-    return config;
+    return { config, rawValues, sourceValues };
   }
 
   let y = yargs(argv);
@@ -84,22 +66,44 @@ export function parseCliArguments(
     const value = (parsed as any)[cliName];
     if (value !== undefined) {
       if (field.type === 'boolean') {
-        const coerced = coerceBooleanValue(value);
+        const coerced = coerceCliBooleanValue(value);
         if (coerced !== undefined) {
           config[field.name] = coerced;
+          sourceValues[field.name] = toSourceValue(coerced);
         } else {
           rawValues[field.name] = value;
         }
       } else {
         config[field.name] = value as string | number | boolean;
+        sourceValues[field.name] = toSourceValue(value);
       }
-    } else if (field.defaultValue !== undefined) {
-      config[field.name] = field.defaultValue as string | number | boolean;
     }
   }
 
-  if (Object.keys(rawValues).length > 0) {
-    return { config, rawValues };
+  return { config, rawValues, sourceValues };
+}
+
+export function parseCliArguments(
+  info: SchemaDescriptor,
+  options?: { argv?: string[] }
+): CliConfig | CliParseResult {
+  const result = parseConfiguredCliArguments(
+    info,
+    options?.argv ?? hideBin(process.argv)
+  );
+
+  if (Object.keys(result.rawValues).length > 0) {
+    return result;
   }
-  return config;
+  return result.config;
+}
+
+export function parseExplicitCliArguments(
+  info: SchemaDescriptor,
+  options?: { argv?: string[] }
+): CliParseResult {
+  return parseConfiguredCliArguments(
+    info,
+    options?.argv ?? hideBin(process.argv)
+  );
 }

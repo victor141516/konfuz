@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { parseEnvVariables } from '../src/env-parser';
+import { parseEnvFileVariables } from '../src/sources/env-file/parser';
+import { parseProcessEnvVariables } from '../src/sources/env-var/parser';
 import { extractSchemaInfo } from '../src/schema-transformer';
 import { z } from 'zod';
 
@@ -26,7 +27,7 @@ describe('env-parser', () => {
     process.env.KONFUZ_TEST_PORT = '3000';
     process.env.KONFUZ_TEST_HOST = 'localhost';
 
-    const config = parseEnvVariables(info, {});
+    const config = parseProcessEnvVariables(info);
 
     expect(config.konfuzTestPort).toBe(3000);
     expect(config.konfuzTestHost).toBe('localhost');
@@ -41,7 +42,7 @@ describe('env-parser', () => {
 
     process.env.KONFUZ_TEST_PORT = '8080';
 
-    const config = parseEnvVariables(info, {});
+    const config = parseProcessEnvVariables(info);
 
     expect(config.konfuzTestPort).toBe(8080);
     expect(typeof config.konfuzTestPort).toBe('number');
@@ -56,7 +57,7 @@ describe('env-parser', () => {
 
     process.env.KONFUZ_TEST_ENABLE_CACHE = 'true';
 
-    const config = parseEnvVariables(info, {});
+    const config = parseProcessEnvVariables(info);
 
     expect(config.konfuzTestEnableCache).toBe(true);
   });
@@ -76,7 +77,7 @@ describe('env-parser', () => {
     process.env.KONFUZ_TEST_FLAG3 = 'yes';
     process.env.KONFUZ_TEST_FLAG4 = 'TRUE';
 
-    const config = parseEnvVariables(info, {});
+    const config = parseProcessEnvVariables(info);
 
     expect(config.konfuzTestFlag1).toBe(true);
     expect(config.konfuzTestFlag2).toBe(true);
@@ -98,7 +99,10 @@ describe('env-parser', () => {
       KONFUZ_TEST_PORT: '9000',
     };
 
-    const config = parseEnvVariables(info, envFileConfig);
+    const config = {
+      ...parseEnvFileVariables(info, envFileConfig),
+      ...parseProcessEnvVariables(info),
+    };
 
     expect(config.konfuzTestPort).toBe(9000);
     expect(config.konfuzTestHost).toBe('env-host');
@@ -117,8 +121,35 @@ describe('env-parser', () => {
       KONFUZ_TEST_PORT: '9000',
     };
 
-    const config = parseEnvVariables(info, envFileConfig);
+    const config = {
+      ...parseEnvFileVariables(info, envFileConfig),
+      ...parseProcessEnvVariables(info),
+    };
 
     expect(config.konfuzTestPort).toBe(4000);
+  });
+
+  it('keeps invalid enum values so final schema validation can reject them', () => {
+    const info = extractSchemaInfo({
+      konfuzTestMode: z.enum(['dev', 'prod']),
+    });
+
+    const config = parseEnvFileVariables(info, {
+      KONFUZ_TEST_MODE: 'staging',
+    });
+
+    expect(config.konfuzTestMode).toBe('staging');
+  });
+
+  it('ignores env file keys whose value is undefined', () => {
+    const info = extractSchemaInfo({
+      konfuzTestPort: z.number(),
+    });
+
+    const config = parseEnvFileVariables(info, {
+      KONFUZ_TEST_PORT: undefined as unknown as string,
+    });
+
+    expect(config).toEqual({});
   });
 });

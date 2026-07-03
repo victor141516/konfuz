@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { ShortParamGenerator, globalGenerator } from '../src/short-param';
+import {
+  ShortParamGenerator,
+  globalGenerator,
+} from '../src/sources/cli/short-param';
 
 describe('short-param', () => {
   beforeEach(() => {
